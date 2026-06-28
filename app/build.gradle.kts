@@ -20,9 +20,19 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Default: no gateway. The debug build overrides this with a dev URL; a
+        // production URL will be set on release once a prod gateway exists.
+        buildConfigField("String", "GATEWAY_URL", "\"\"")
     }
 
     buildTypes {
+        debug {
+            // Dev gateway on the host's LAN IP so a physical device on the same
+            // Wi-Fi can reach it (the emulator can reach this IP too). Change this
+            // to match your machine's address if it differs.
+            buildConfigField("String", "GATEWAY_URL", "\"ws://192.168.1.10:8080/v1/connect\"")
+        }
         release {
             optimization {
                 enable = false
@@ -37,6 +47,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     testOptions {
         unitTests {
@@ -57,6 +68,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.geckoview)
+    implementation(libs.okhttp)
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)

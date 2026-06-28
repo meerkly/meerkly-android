@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only: permit cleartext (ws://) to the dev gateway during development.
+  - 192.168.1.10: host LAN IP for a physical device on the same Wi-Fi (the debug
+    build's default GATEWAY_URL). Update to match your machine if it differs.
+  - 10.0.2.2: the emulator's alias for the host machine.
+  - localhost: on-device/loopback.
+  Release builds do not include this file and stay HTTPS/WSS-only.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">192.168.1.10</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+    </domain-config>
+</network-security-config>

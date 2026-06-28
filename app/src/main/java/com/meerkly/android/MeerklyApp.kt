@@ -9,6 +9,7 @@ import com.meerkly.android.browser.GeckoBrowserManager
 import com.meerkly.android.data.MachineIdManager
 import com.meerkly.android.data.RecentNavigationRepository
 import com.meerkly.android.diagnostics.DiagnosticsExporter
+import com.meerkly.android.gateway.GatewayClient
 import com.meerkly.android.logging.AppLogger
 import com.meerkly.android.logging.JsonlFileLogger
 import com.meerkly.android.logging.LogRetention
@@ -55,6 +56,7 @@ class AppGraph(app: Application) {
     val geckoVersion: String? = runCatching { org.mozilla.geckoview.BuildConfig.MOZILLA_VERSION }.getOrNull()
     val browserManager = GeckoBrowserManager(app, logger)
     val diagnostics = DiagnosticsExporter(app, logger, recentRepo, machineId, geckoVersion)
+    val gatewayClient = GatewayClient(app, machineId, geckoVersion, logger, BuildConfig.GATEWAY_URL)
 
     init {
         runCatching { LogRetention.apply(logDir, LocalDate.now(ZoneOffset.UTC)) }
@@ -63,5 +65,7 @@ class AppGraph(app: Application) {
             mapOf("machine_id" to machineId, "sdk" to Build.VERSION.SDK_INT, "geckoview" to geckoVersion),
         )
         browserManager.start()
+        // Register this device as a worker with the API gateway.
+        gatewayClient.start()
     }
 }
