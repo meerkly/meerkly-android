@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Diagnostics ZIPs are written to cacheDir/diagnostics and shared via FileProvider. -->
+    <cache-path
+        name="diagnostics"
+        path="diagnostics/" />
+    <!-- Fallback location under getExternalFilesDir("diagnostics"). -->
+    <external-files-path
+        name="diagnostics_external"
+        path="diagnostics/" />
+</paths>
