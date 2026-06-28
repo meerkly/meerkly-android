@@ -1,0 +1,27 @@
+{
+  "manifest_version": 2,
+  "name": "Meerkly Extractor",
+  "version": "1.0",
+  "description": "Extracts page HTML for Meerkly fetch jobs and sends it to the app via native messaging.",
+  "applications": {
+    "gecko": {
+      "id": "extractor@meerkly"
+    }
+  },
+  "permissions": [
+    "nativeMessaging",
+    "geckoViewAddons",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

@@ -2,8 +2,10 @@ package com.meerkly.android.gateway
 
 import android.content.Context
 import android.os.Build
+import com.meerkly.android.browser.GeckoBrowserManager
 import com.meerkly.android.logging.AppLogger
 import com.meerkly.android.util.MiniJson
+import com.meerkly.android.util.UrlValidator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -15,6 +17,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
@@ -30,6 +33,7 @@ class GatewayClient(
     private val machineId: String,
     private val geckoVersion: String?,
     private val logger: AppLogger,
+    private val browserManager: GeckoBrowserManager,
     private val url: String,
 ) {
     private val client = OkHttpClient.Builder()
@@ -76,7 +80,11 @@ class GatewayClient(
         }
 
         override fun onMessage(ws: WebSocket, text: String) {
-            logger.info("gateway.message", mapOf("text" to text))
+            val msg = runCatching { JSONObject(text) }.getOrNull() ?: return
+            when (msg.optString("type")) {
+                "fetch" -> handleFetch(ws, msg.optString("jobId"), msg.optString("url"))
+                else -> logger.info("gateway.message", mapOf("type" to msg.optString("type")))
+            }
         }
 
         override fun onClosing(ws: WebSocket, code: Int, reason: String) {
@@ -105,6 +113,54 @@ class GatewayClient(
         }
     }
 
+    /** Run a crawl job on the GeckoView session and return the HTML to the gateway. */
+    private fun handleFetch(ws: WebSocket, jobId: String, url: String) {
+        logger.info("gateway.fetch", mapOf("jobId" to jobId, "url" to url))
+        // GeckoView session operations must run on the main thread.
+        scope.launch(Dispatchers.Main) {
+            UrlValidator.validateAndNormalize(url).fold(
+                onSuccess = { normalized ->
+                    val (nav, html) = browserManager.navigateAndExtract(normalized)
+                    if (nav.success && html != null) {
+                        sendResult(ws, jobId, true, nav.finalUrl, nav.title, html, null, nav.loadedMs)
+                    } else {
+                        val err = nav.error ?: "HTML extraction failed"
+                        sendResult(ws, jobId, false, nav.finalUrl, nav.title, null, err, nav.loadedMs)
+                    }
+                },
+                onFailure = { e ->
+                    sendResult(ws, jobId, false, null, null, null, e.message ?: "Invalid URL", null)
+                },
+            )
+        }
+    }
+
+    private fun sendResult(
+        ws: WebSocket,
+        jobId: String,
+        success: Boolean,
+        finalUrl: String?,
+        title: String?,
+        html: String?,
+        error: String?,
+        loadedMs: Long?,
+    ) {
+        ws.send(
+            MiniJson.encode(
+                mapOf(
+                    "type" to "result",
+                    "jobId" to jobId,
+                    "success" to success,
+                    "finalUrl" to finalUrl,
+                    "title" to title,
+                    "html" to html,
+                    "error" to error,
+                    "loadedMs" to loadedMs,
+                ),
+            ),
+        )
+    }
+
     private fun buildRegister(): String {
         val appVersion = runCatching {
             appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName
@@ -114,6 +170,8 @@ class GatewayClient(
                 "type" to "register",
                 "machineId" to machineId,
                 "platform" to "android",
+                "capabilities" to listOf("fetch"),
+                "region" to "",
                 "device" to mapOf(
                     "deviceModel" to "${Build.MANUFACTURER} ${Build.MODEL}",
                     "os" to "android ${Build.VERSION.RELEASE} (sdk ${Build.VERSION.SDK_INT})",

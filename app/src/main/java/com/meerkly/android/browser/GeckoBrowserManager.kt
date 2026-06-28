@@ -11,9 +11,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONObject
+import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
+import org.mozilla.geckoview.WebExtension
 import java.time.Duration
 import java.time.Instant
 
@@ -50,6 +53,8 @@ class GeckoBrowserManager(
     private var lastSuccess: Boolean = false
     private var lastUrl: String? = null
     private var lastTitle: String? = null
+
+    private val extractor = HtmlExtractor(logger)
 
     /** One object fulfils all three delegate roles for the primary session. */
     private val delegate = object :
@@ -113,8 +118,52 @@ class GeckoBrowserManager(
     fun start() {
         if (session != null) return
         val rt = GeckoRuntime.getDefault(appContext).also { runtime = it }
+        installExtractor(rt)
         session = newSession(rt)
         logger.info("browser.started", mapOf("geckoview" to org.mozilla.geckoview.BuildConfig.MOZILLA_VERSION))
+    }
+
+    /** Loads the bundled HTML-extractor WebExtension and wires its native port. */
+    private fun installExtractor(rt: GeckoRuntime) {
+        rt.webExtensionController
+            .ensureBuiltIn(EXTENSION_URI, EXTENSION_ID)
+            .accept(
+                { ext -> ext?.let { registerExtractorPort(it) } },
+                { e -> logger.error("browser.extractor_failed", mapOf("error" to (e?.message ?: "unknown"))) },
+            )
+    }
+
+    private fun registerExtractorPort(ext: WebExtension) {
+        // HTML extraction path: content script -> background (runtime.sendMessage)
+        // -> background runtime.sendNativeMessage("meerkly", …) -> here. Two GeckoView
+        // constraints make this the only working shape (see assets/extensions/extractor):
+        //   1. The manifest MUST declare the `geckoViewAddons` permission, else native
+        //      messaging falls through to native manifests ("not supported on android").
+        //   2. The native send MUST come from the persistent background, not the page's
+        //      content context — a content-context send dies with "context unloaded"
+        //      because the headless page is torn down before the round-trip completes.
+        //   connectNative (a Port) is unsupported on Android; use sendNativeMessage.
+        ext.setMessageDelegate(
+            object : WebExtension.MessageDelegate {
+                override fun onMessage(
+                    nativeApp: String,
+                    message: Any,
+                    sender: WebExtension.MessageSender,
+                ): GeckoResult<Any>? {
+                    val o = message as? JSONObject
+                    if (o != null && o.optString("kind") == "page") {
+                        extractor.onPage(
+                            url = o.optString("url"),
+                            title = o.optString("title").ifEmpty { null },
+                            html = o.optString("html"),
+                        )
+                    }
+                    return null
+                }
+            },
+            "meerkly",
+        )
+        logger.info("browser.extractor_installed")
     }
 
     private fun newSession(rt: GeckoRuntime): GeckoSession {
@@ -176,6 +225,25 @@ class GeckoBrowserManager(
         }
     }
 
+    /**
+     * Navigates to [url] and, on success, returns the page HTML extracted by the
+     * WebExtension. Used for gateway-dispatched fetch jobs. [html] is null if the
+     * navigation failed or extraction did not produce the final page in time.
+     */
+    suspend fun navigateAndExtract(url: String, timeoutMs: Long = 30_000L): Pair<NavigationResult, String?> {
+        extractor.reset()
+        val nav = navigate(url, timeoutMs)
+        if (!nav.success) return nav to null
+        val page = extractor.await(nav.finalUrl)
+        val html = page?.html
+        val result = if (html != null) {
+            nav.copy(htmlSizeBytes = html.toByteArray(Charsets.UTF_8).size.toLong())
+        } else {
+            nav
+        }
+        return result to html
+    }
+
     fun stopLoading() {
         session?.stop()
     }
@@ -190,5 +258,10 @@ class GeckoBrowserManager(
         runCatching { session?.close() }
         session = newSession(rt)
         logger.info("browser.session_recovered")
+    }
+
+    private companion object {
+        const val EXTENSION_URI = "resource://android/assets/extensions/extractor/"
+        const val EXTENSION_ID = "extractor@meerkly"
     }
 }

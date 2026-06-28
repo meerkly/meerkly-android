@@ -56,7 +56,7 @@ class AppGraph(app: Application) {
     val geckoVersion: String? = runCatching { org.mozilla.geckoview.BuildConfig.MOZILLA_VERSION }.getOrNull()
     val browserManager = GeckoBrowserManager(app, logger)
     val diagnostics = DiagnosticsExporter(app, logger, recentRepo, machineId, geckoVersion)
-    val gatewayClient = GatewayClient(app, machineId, geckoVersion, logger, BuildConfig.GATEWAY_URL)
+    val gatewayClient = GatewayClient(app, machineId, geckoVersion, logger, browserManager, BuildConfig.GATEWAY_URL)
 
     init {
         runCatching { LogRetention.apply(logDir, LocalDate.now(ZoneOffset.UTC)) }
