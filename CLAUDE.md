@@ -2,21 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Source of truth:** the full porting guide lives at [docs/android-port-guide.md](docs/android-port-guide.md).
-> This file is the condensed, current-state summary; the guide has the complete rationale, package
-> layout, and phase-by-phase checklist.
-
 ## What this is
 
-Android port of the existing Electron-based **Meerkly** desktop app. The goal of the current
-phase is a **strictly local MVP**: a user types a URL, the app validates it, loads it in a real
-browser engine (**GeckoView**, not Android `WebView`), and records the result (final URL, title,
-timing, logs, diagnostics). No backend, no networking beyond the page load itself.
+Android port of the existing Electron-based **Meerkly** desktop app: a user types a URL, the app
+validates it, loads it in a real browser engine (**GeckoView**, not Android `WebView`), and records
+the result (final URL, title, timing, logs, diagnostics). It **also runs as a gateway worker** —
+holding a WebSocket to `api-gateway` and serving `fetch` jobs by navigating + extracting page HTML.
 
-> **Current repo state:** this is still the default Android Studio "Empty Activity" scaffold.
-> `MainActivity.kt` only shows a `Greeting` composable; there is no Meerkly code, no GeckoView,
-> no `com.meerkly.android.{browser,data,logging,...}` packages yet. Treat the "Target architecture"
-> and "Migration phases" sections below as the build plan, not a description of existing code.
+> **Current repo state:** the full `com.meerkly.android.*` implementation exists (browser, data,
+> logging, diagnostics, gateway, ui, util) — the worker phase is live, not a plan. Treat the "Target
+> architecture (build plan)" section below as historical context; trust the code and the "Gateway
+> worker" section over it where they conflict.
 
 ## Build, test, run
 
@@ -51,27 +47,25 @@ in `app/build.gradle.kts`.
 
 - AGP `9.2.1`, Kotlin `2.2.10`, Gradle `9.4.1`, Compose BOM `2026.02.01`
 - `compileSdk = 36` (declared via the new AGP 9 `compileSdk { version = release(36) { ... } }` DSL),
-  `targetSdk = 36`, **`minSdk = 26`** (Android 8.0). The guide originally targeted API 24, but
-  GeckoView 152's AAR declares `minSdkVersion 26`, so 26 is the hard floor — manifest-merger fails
-  at 24/25.
-- App compiles against **Java 11** (`compileOptions` source/target = `VERSION_11`). Note: the
-  porting guide text suggests Java 17 — the actual project is on 11. Pick a level deliberately and
-  keep `compileOptions`, any `kotlin { compilerOptions { jvmTarget } }`, and the GeckoView
-  requirement consistent if you change it. On AGP 9 / Kotlin 2.2 use the `compilerOptions {}` DSL,
-  not the deprecated `kotlinOptions {}` shown in the guide.
+  `targetSdk = 36`, **`minSdk = 26`** (Android 8.0). GeckoView 152's AAR declares `minSdkVersion 26`,
+  so 26 is the hard floor — manifest-merger fails at 24/25.
+- App compiles against **Java 17** (`compileOptions` source/target = `VERSION_17`) — GeckoView 152
+  requires it. Keep `compileOptions`, any `kotlin { compilerOptions { jvmTarget } }`, and the GeckoView
+  requirement consistent if you change it. On AGP 9 / Kotlin 2.2 use the `compilerOptions {}` DSL, not
+  the deprecated `kotlinOptions {}` DSL.
 
 **Pin GeckoView explicitly** (currently `152.0.20260621191700`, Lite build) and re-test
 navigation/storage/extraction/crash-recovery on every bump — a bump can also raise the required
 minSdk. Gate any newer platform APIs behind `Build.VERSION.SDK_INT` checks.
 
-## Adding GeckoView (not yet present)
+## GeckoView wiring (already in place)
 
-Two setup steps the scaffold is missing:
+GeckoView is set up — keep it consistent if you touch the build:
 
-1. Add Mozilla Maven to `dependencyResolutionManagement.repositories` in `settings.gradle.kts`:
+1. Mozilla Maven is in `dependencyResolutionManagement.repositories` in `settings.gradle.kts`:
    `maven { url = uri("https://maven.mozilla.org/maven2/") }` (note: `repositoriesMode` is
    `FAIL_ON_PROJECT_REPOS`, so it must go here, not in a module build file).
-2. Add `org.mozilla.geckoview:geckoview:<PINNED_VERSION>` via the version catalog.
+2. `org.mozilla.geckoview:geckoview:<PINNED_VERSION>` is declared via the version catalog.
 
 GeckoView is the chosen engine on purpose. **Do not use Android `WebView` as the production
 engine** (it fingerprints as an embedded `wv` runtime). The target identity is a coherent real
@@ -102,12 +96,12 @@ capture, optional local HTML extraction (via a Gecko **WebExtension + native mes
 shared via `ACTION_SEND`), and crash/session recovery (close failed session, optionally recreate
 runtime, return to idle, let the user retry).
 
-## Hard constraints (non-negotiable for this MVP)
+## Hard constraints (non-negotiable)
 
-- **Local only.** Do not build: backend API, WebSocket protocol, worker registration/identity,
-  remote job assignment, heartbeats, artifact upload, object storage, payouts/earnings, policy
-  engine, or any "Earn Mode" / wallet / worker-dashboard UI. The only network activity is the
-  browser loading the user-entered URL. These belong to a future remote-worker phase.
+- **Scope is local crawl + gateway worker.** The worker phase is live (WebSocket register +
+  `fetch`/`result` over `gateway/GatewayClient.kt`). Still **do not build** ahead of a new plan:
+  durable storage / DB, job queue, auth, artifact upload, object storage, geo-targeted selection,
+  payouts/earnings, policy engine, or any "Earn Mode" / wallet / worker-dashboard UI.
 - **URL validation** (port of `src/shared/urlValidator.ts`): trim and reject empty; if no scheme,
   prepend `https://`; allow only `http`/`https`; **reject `file:`, `chrome:`, `about:`, `content:`,
   `javascript:`, `data:`**. Validate/normalize before every load.
@@ -116,8 +110,25 @@ runtime, return to idle, let the user retry).
 - **Logging/diagnostics:** JSONL entries `{ ts, level, event, machine_id, data }`. Do **not** put
   full page HTML in logs or in diagnostics by default (it can contain private content) — only
   requested URL, final URL, title, duration, success/failure unless the user opts in.
-- **Permissions:** add `INTERNET` (and optionally `ACCESS_NETWORK_STATE`) to the manifest — it
-  currently has none. No foreground-service permission unless/until a service actually exists.
+- **Permissions:** `INTERNET` is required (worker WebSocket + page loads). No foreground-service
+  permission unless/until a service actually exists.
+
+## Gateway worker (live)
+
+`gateway/GatewayClient.kt` (OkHttp) holds a persistent WebSocket to `api-gateway`, registers with
+`capabilities:["fetch"]` (reconnect with backoff), and serves `fetch` jobs by driving
+`browser/GeckoBrowserManager.navigateAndExtract(url, waitFor, settleMs, rules, detectMs)`, replying
+with a `result` (HTML + `waitTimedOut` + `matchedRule`). The wire schema is owned by
+`api-gateway/internal/model/device.go` — change the Go model, this client, and the desktop client
+together. Keep wait semantics **identical to the desktop worker** (see the root `CLAUDE.md` invariant).
+
+HTML extraction + the wait happen in a bundled GeckoView **WebExtension** under
+`app/src/main/assets/extensions/extractor/` (`content.js` reads the per-job spec via native messaging,
+applies `wait_for`/`wait_rules`/`settle_ms`/`detect_ms`, and pushes snapshots). This path has several
+**hard-won GeckoView constraints** (string-only native replies, `run_at: document_idle`, an early
+fire-and-forget snapshot, `setActive(true)`) — they're documented in detail in
+`api-gateway/CLAUDE.md` and commented in `GeckoBrowserManager.kt`. Re-test extraction on every
+GeckoView bump.
 
 ## Conventions
 

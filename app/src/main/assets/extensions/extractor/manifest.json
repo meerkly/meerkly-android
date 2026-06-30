@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "Meerkly Extractor",
   "version": "1.0",
-  "description": "Extracts page HTML for Meerkly fetch jobs and sends it to the app via native messaging.",
+  "description": "Waits per the job's wait_for spec and sends page HTML to the app via native messaging.",
   "applications": {
     "gecko": {
       "id": "extractor@meerkly"

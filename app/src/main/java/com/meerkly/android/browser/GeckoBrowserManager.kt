@@ -8,9 +8,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONArray
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -55,6 +58,25 @@ class GeckoBrowserManager(
     private var lastTitle: String? = null
 
     private val extractor = HtmlExtractor(logger)
+
+    /** wait_for spec for the in-flight job; handed to the content script on request. */
+    @Volatile
+    private var currentWaitFor: String = WaitDOMContentLoaded
+
+    /** settle_ms for the in-flight job (0 = content-script default). */
+    @Volatile
+    private var currentSettleMs: Int = 0
+
+    /** wait_rules for the in-flight job, as a JSON array string ("[]" = none). */
+    @Volatile
+    private var currentRules: String = "[]"
+
+    /** detect_ms (wait_rules guard probe window) for the in-flight job (0 = default). */
+    @Volatile
+    private var currentDetectMs: Int = 0
+
+    /** Result of a fetch job: navigation outcome + extracted HTML + wait flags. */
+    data class FetchOutcome(val nav: NavigationResult, val html: String?, val waitTimedOut: Boolean, val matchedRule: Int = -1)
 
     /** One object fulfils all three delegate roles for the primary session. */
     private val delegate = object :
@@ -150,12 +172,27 @@ class GeckoBrowserManager(
                     message: Any,
                     sender: WebExtension.MessageSender,
                 ): GeckoResult<Any>? {
-                    val o = message as? JSONObject
-                    if (o != null && o.optString("kind") == "page") {
-                        extractor.onPage(
+                    val o = message as? JSONObject ?: return null
+                    when (o.optString("kind")) {
+                        // app -> content: hand the content script this job's wait spec.
+                        // Hand the content script this job's spec as a JSON *string* (not a
+                        // JSONObject): object replies don't serialize back across the
+                        // content-process boundary (they fail with "Invalid event data"), but a
+                        // string does — the content script JSON.parses it.
+                        "spec" -> {
+                            val reply = JSONObject()
+                                .put("waitFor", currentWaitFor)
+                                .put("settleMs", currentSettleMs)
+                                .put("waitRules", JSONArray(currentRules))
+                                .put("detectMs", currentDetectMs)
+                            return GeckoResult.fromValue(reply.toString() as Any)
+                        }
+                        "page" -> extractor.onPage(
                             url = o.optString("url"),
                             title = o.optString("title").ifEmpty { null },
                             html = o.optString("html"),
+                            final = o.optBoolean("final", true),
+                            matchedRule = o.optInt("matchedRule", -1),
                         )
                     }
                     return null
@@ -176,6 +213,11 @@ class GeckoBrowserManager(
             setNavigationDelegate(delegate)
             setContentDelegate(delegate)
             open(rt)
+            // No GeckoView surface is attached (headless worker). Mark the session
+            // active so its content process keeps high priority and is not discarded
+            // mid-wait — otherwise delayed captures (selector/networkidle) lose their
+            // content context before they can send the HTML.
+            setActive(true)
         }
     }
 
@@ -226,22 +268,46 @@ class GeckoBrowserManager(
     }
 
     /**
-     * Navigates to [url] and, on success, returns the page HTML extracted by the
-     * WebExtension. Used for gateway-dispatched fetch jobs. [html] is null if the
-     * navigation failed or extraction did not produce the final page in time.
+     * Navigates to [url], waits per [waitFor] (the content script applies the
+     * spec it requests via the `spec` message), and returns the extracted HTML.
+     * The page-wait runs concurrently with navigation so the total stays within
+     * [timeoutMs]. [FetchOutcome.html] is null only if extraction never produced a
+     * page (e.g. the extension broke); a wait timeout still returns best-effort
+     * HTML with [FetchOutcome.waitTimedOut] = true.
      */
-    suspend fun navigateAndExtract(url: String, timeoutMs: Long = 30_000L): Pair<NavigationResult, String?> {
+    suspend fun navigateAndExtract(
+        url: String,
+        waitFor: String,
+        settleMs: Int = 0,
+        rules: String = "[]",
+        detectMs: Int = 0,
+        timeoutMs: Long = 30_000L,
+    ): FetchOutcome = coroutineScope {
+        currentWaitFor = waitFor
+        currentSettleMs = settleMs
+        currentRules = rules
+        currentDetectMs = detectMs
         extractor.reset()
+        val hasRules = runCatching { JSONArray(rules).length() > 0 }.getOrDefault(false)
+        // domcontentloaded is satisfied by the early snapshot; the waiting modes —
+        // and any wait_rules path (rule target or settle fallback) — need the
+        // condition-met "final" snapshot (falling back to the early one).
+        val wantFinal = hasRules || waitFor != WaitDOMContentLoaded
+        val pageJob = async { if (wantFinal) extractor.awaitFinal(timeoutMs) else extractor.awaitAny(timeoutMs) }
         val nav = navigate(url, timeoutMs)
-        if (!nav.success) return nav to null
-        val page = extractor.await(nav.finalUrl)
+        if (!nav.success) {
+            pageJob.cancel()
+            return@coroutineScope FetchOutcome(nav, null, false)
+        }
+        val got = pageJob.await()
+        val page = got ?: extractor.latestPage()
         val html = page?.html
         val result = if (html != null) {
             nav.copy(htmlSizeBytes = html.toByteArray(Charsets.UTF_8).size.toLong())
         } else {
             nav
         }
-        return result to html
+        FetchOutcome(result, html, wantFinal && got == null && html != null, page?.matchedRule ?: -1)
     }
 
     fun stopLoading() {
@@ -263,5 +329,6 @@ class GeckoBrowserManager(
     private companion object {
         const val EXTENSION_URI = "resource://android/assets/extensions/extractor/"
         const val EXTENSION_ID = "extractor@meerkly"
+        const val WaitDOMContentLoaded = "domcontentloaded"
     }
 }

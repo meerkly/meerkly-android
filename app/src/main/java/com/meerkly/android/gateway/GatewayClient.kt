@@ -82,7 +82,15 @@ class GatewayClient(
         override fun onMessage(ws: WebSocket, text: String) {
             val msg = runCatching { JSONObject(text) }.getOrNull() ?: return
             when (msg.optString("type")) {
-                "fetch" -> handleFetch(ws, msg.optString("jobId"), msg.optString("url"))
+                "fetch" -> handleFetch(
+                    ws,
+                    msg.optString("jobId"),
+                    msg.optString("url"),
+                    msg.optString("waitFor"),
+                    msg.optInt("settleMs"),
+                    msg.optJSONArray("waitRules")?.toString() ?: "[]",
+                    msg.optInt("detectMs"),
+                )
                 else -> logger.info("gateway.message", mapOf("type" to msg.optString("type")))
             }
         }
@@ -114,22 +122,24 @@ class GatewayClient(
     }
 
     /** Run a crawl job on the GeckoView session and return the HTML to the gateway. */
-    private fun handleFetch(ws: WebSocket, jobId: String, url: String) {
-        logger.info("gateway.fetch", mapOf("jobId" to jobId, "url" to url))
+    private fun handleFetch(ws: WebSocket, jobId: String, url: String, waitFor: String, settleMs: Int, rules: String, detectMs: Int) {
+        val mode = waitFor.ifEmpty { "stable" }
+        logger.info("gateway.fetch", mapOf("jobId" to jobId, "url" to url, "waitFor" to mode, "settleMs" to settleMs, "detectMs" to detectMs))
         // GeckoView session operations must run on the main thread.
         scope.launch(Dispatchers.Main) {
             UrlValidator.validateAndNormalize(url).fold(
                 onSuccess = { normalized ->
-                    val (nav, html) = browserManager.navigateAndExtract(normalized)
-                    if (nav.success && html != null) {
-                        sendResult(ws, jobId, true, nav.finalUrl, nav.title, html, null, nav.loadedMs)
+                    val outcome = browserManager.navigateAndExtract(normalized, mode, settleMs, rules, detectMs)
+                    val nav = outcome.nav
+                    if (nav.success && outcome.html != null) {
+                        sendResult(ws, jobId, true, nav.finalUrl, nav.title, outcome.html, null, nav.loadedMs, outcome.waitTimedOut, outcome.matchedRule)
                     } else {
                         val err = nav.error ?: "HTML extraction failed"
-                        sendResult(ws, jobId, false, nav.finalUrl, nav.title, null, err, nav.loadedMs)
+                        sendResult(ws, jobId, false, nav.finalUrl, nav.title, null, err, nav.loadedMs, false, -1)
                     }
                 },
                 onFailure = { e ->
-                    sendResult(ws, jobId, false, null, null, null, e.message ?: "Invalid URL", null)
+                    sendResult(ws, jobId, false, null, null, null, e.message ?: "Invalid URL", null, false, -1)
                 },
             )
         }
@@ -144,6 +154,8 @@ class GatewayClient(
         html: String?,
         error: String?,
         loadedMs: Long?,
+        waitTimedOut: Boolean,
+        matchedRule: Int,
     ) {
         ws.send(
             MiniJson.encode(
@@ -156,6 +168,8 @@ class GatewayClient(
                     "html" to html,
                     "error" to error,
                     "loadedMs" to loadedMs,
+                    "waitTimedOut" to waitTimedOut,
+                    "matchedRule" to matchedRule,
                 ),
             ),
         )
