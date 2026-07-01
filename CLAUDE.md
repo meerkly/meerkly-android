@@ -113,7 +113,7 @@ runtime, return to idle, let the user retry).
 - **Permissions:** `INTERNET` is required (worker WebSocket + page loads). No foreground-service
   permission unless/until a service actually exists.
 
-## Gateway worker (live)
+## Gateway worker (live, but currently locked out — needs Android sign-in)
 
 `gateway/GatewayClient.kt` (OkHttp) holds a persistent WebSocket to `api-gateway`, registers with
 `capabilities:["fetch"]` (reconnect with backoff), and serves `fetch` jobs by driving
@@ -121,6 +121,14 @@ runtime, return to idle, let the user retry).
 with a `result` (HTML + `waitTimedOut` + `matchedRule`). The wire schema is owned by
 `api-gateway/internal/model/device.go` — change the Go model, this client, and the desktop client
 together. Keep wait semantics **identical to the desktop worker** (see the root `CLAUDE.md` invariant).
+
+> **Device auth (Phase 4):** the gateway now **requires** a `deviceToken` in the register frame
+> (issued by `account-meerkly-com`'s `POST /api/devices` when a signed-in user registers the device;
+> the gateway rejects unpaired workers with an `error` frame and closes). This client doesn't send
+> one yet, so **Android workers cannot connect until Android gets OAuth sign-in + device
+> registration** (mirror the desktop: `oauth.ts` + `deviceRegistration.ts` + the gated gateway
+> start in `meerkly-desktop/src/main/index.ts`). The wire field is optional-in-schema, so the frame
+> still parses — the rejection is by policy, not parsing.
 
 HTML extraction + the wait happen in a bundled GeckoView **WebExtension** under
 `app/src/main/assets/extensions/extractor/` (`content.js` reads the per-job spec via native messaging,
