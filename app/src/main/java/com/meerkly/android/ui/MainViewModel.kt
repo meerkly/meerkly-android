@@ -1,10 +1,12 @@
 package com.meerkly.android.ui
 
 import android.app.Application
+import android.content.Intent
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.meerkly.android.MeerklyApp
+import com.meerkly.android.model.AuthStatus
 import com.meerkly.android.model.BrowserStatus
 import com.meerkly.android.model.NavigationResult
 import com.meerkly.android.util.UrlValidator
@@ -36,6 +38,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _status = MutableStateFlow<BrowserStatus>(BrowserStatus.Idle)
     val status: StateFlow<BrowserStatus> = _status.asStateFlow()
+
+    // Sign-in + device-link state driving the root UI (gate vs dashboard).
+    val authStatus: StateFlow<AuthStatus> = graph.account.status
+
+    private val _signingIn = MutableStateFlow(false)
+    val signingIn: StateFlow<Boolean> = _signingIn.asStateFlow()
+
+    private val _signInError = MutableStateFlow<String?>(null)
+    val signInError: StateFlow<String?> = _signInError.asStateFlow()
+
+    /** The browser intent starting the OAuth flow (launched for result by the gate). */
+    fun signInIntent(): Intent = graph.authManager.signInIntent()
+
+    fun onSignInLaunched() {
+        _signingIn.value = true
+        _signInError.value = null
+    }
+
+    fun onSignInFailedToLaunch(message: String) {
+        _signingIn.value = false
+        _signInError.value = message
+    }
+
+    /** Completes the OAuth redirect result: exchange, pair the device, connect the worker. */
+    fun onSignInResult(data: Intent?) {
+        viewModelScope.launch {
+            val error = graph.account.completeSignIn(data)
+            _signingIn.value = false
+            _signInError.value = error
+        }
+    }
+
+    fun signOut() {
+        viewModelScope.launch { graph.account.signOut() }
+    }
 
     val machineInfo = MachineInfo(
         machineId = graph.machineId,

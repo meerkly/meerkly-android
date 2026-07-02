@@ -24,6 +24,14 @@ android {
         // Default: no gateway. The debug build overrides this with a dev URL; a
         // production URL will be set on release once a prod gateway exists.
         buildConfigField("String", "GATEWAY_URL", "\"\"")
+        // Account portal (OAuth provider + device registration API). Same
+        // default/override pattern as GATEWAY_URL.
+        buildConfigField("String", "ACCOUNT_BASE_URL", "\"\"")
+
+        // AppAuth's RedirectUriReceiverActivity binds this scheme (manifest merge)
+        // to catch the OAuth redirect com.meerkly.android:/oauth2redirect — must
+        // byte-match the redirect_uri seeded for the meerkly-android client.
+        manifestPlaceholders["appAuthRedirectScheme"] = "com.meerkly.android"
     }
 
     buildTypes {
@@ -32,6 +40,9 @@ android {
             // Wi-Fi can reach it (the emulator can reach this IP too). Change this
             // to match your machine's address if it differs.
             buildConfigField("String", "GATEWAY_URL", "\"ws://192.168.1.10:8080/v1/connect\"")
+            // Rails dev server on the same host (cleartext allowed for this IP by
+            // the debug network_security_config; Rails allows IP-literal hosts).
+            buildConfigField("String", "ACCOUNT_BASE_URL", "\"http://192.168.1.10:3000\"")
         }
         release {
             optimization {
@@ -69,10 +80,12 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.geckoview)
     implementation(libs.okhttp)
+    implementation(libs.appauth)
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.arch.core.testing)
+    testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)

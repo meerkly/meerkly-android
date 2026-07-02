@@ -113,22 +113,48 @@ runtime, return to idle, let the user retry).
 - **Permissions:** `INTERNET` is required (worker WebSocket + page loads). No foreground-service
   permission unless/until a service actually exists.
 
-## Gateway worker (live, but currently locked out — needs Android sign-in)
+## Gateway worker (live, gated on device pairing)
 
 `gateway/GatewayClient.kt` (OkHttp) holds a persistent WebSocket to `api-gateway`, registers with
-`capabilities:["fetch"]` (reconnect with backoff), and serves `fetch` jobs by driving
+`capabilities:["fetch"]` **+ the `deviceToken`** (read fresh from `DeviceRegistrationManager` on
+every (re)connect), and serves `fetch` jobs by driving
 `browser/GeckoBrowserManager.navigateAndExtract(url, waitFor, settleMs, rules, detectMs)`, replying
-with a `result` (HTML + `waitTimedOut` + `matchedRule`). The wire schema is owned by
+with a `result` (HTML + `waitTimedOut` + `matchedRule`). Gateway `error` frames are handled:
+`device_auth_failed` (terminal) pauses reconnects until `reconnect()` presents a new token;
+`verification_unavailable` keeps normal backoff. The wire schema is owned by
 `api-gateway/internal/model/device.go` — change the Go model, this client, and the desktop client
 together. Keep wait semantics **identical to the desktop worker** (see the root `CLAUDE.md` invariant).
 
-> **Device auth (Phase 4):** the gateway now **requires** a `deviceToken` in the register frame
-> (issued by `account-meerkly-com`'s `POST /api/devices` when a signed-in user registers the device;
-> the gateway rejects unpaired workers with an `error` frame and closes). This client doesn't send
-> one yet, so **Android workers cannot connect until Android gets OAuth sign-in + device
-> registration** (mirror the desktop: `oauth.ts` + `deviceRegistration.ts` + the gated gateway
-> start in `meerkly-desktop/src/main/index.ts`). The wire field is optional-in-schema, so the frame
-> still parses — the rejection is by policy, not parsing.
+## Account sign-in + device registration (live)
+
+Mirrors the desktop flow (`oauth.ts` / `deviceRegistration.ts` / `index.ts`):
+- **`auth/AuthManager.kt`** — OAuth2 Auth Code + PKCE via **AppAuth** against
+  `BuildConfig.ACCOUNT_BASE_URL` (Doorkeeper; static endpoints, no discovery). Client id
+  `meerkly-android`, redirect `com.meerkly.android:/oauth2redirect` — bound via the
+  `appAuthRedirectScheme` **manifestPlaceholder** in `app/build.gradle.kts` (must byte-match the
+  Rails seed). Scopes `public worker`. **Debug builds inject a cleartext-permitting
+  `ConnectionBuilder`** (AppAuth's default refuses the `http://` dev token endpoint). AuthState is
+  persisted via SecureStore; sign-out revokes (`POST /oauth/revoke`) and clears auth keys only.
+- **`data/SecureStore.kt`** — AndroidKeyStore AES/GCM encryption over `meerkly_prefs` values
+  (session-memory fallback if the Keystore is broken; never plaintext on disk).
+- **`data/DeviceInfo.kt`** — the single source for the self-reported device block used by BOTH the
+  gateway register frame and the claim body (don't let them drift).
+- **`data/DeviceRegistrationManager.kt`** — `POST /api/devices` (Bearer, worker scope) on first
+  sign-in; stores the returned device token (rotates on re-claim); 409 = linked to another account.
+  Desktop-mirrored error strings; failures never clear a stored token; **sign-out never unregisters**.
+- **`auth/AccountCoordinator.kt`** — the wiring: gateway start is **gated on pairing**; startup
+  heals signed-in-but-unregistered installs; sign-in → register → `reconnect()`. Exposes the merged
+  `StateFlow<AuthStatus>` the UI renders.
+
+## UI (cream & ink)
+
+`ui/RootScreen.kt` switches Loading → `AuthGateScreen` → `DashboardScreen` on `AuthStatus`, keeping a
+**persistent 1dp invisible `GeckoViewHost` composed at all times** — extraction needs an attached
+active surface and fetch jobs run regardless of the visible screen. Never compose two hosts at once
+(single `GeckoSession`). The old URL tester lives on as `ui/DebugToolsScreen.kt` (debug builds only,
+long-press the dashboard footer); it swaps in its own full-size host. Brand art (mascot/coin/icons)
+is Compose Canvas in `ui/BrandArt.kt`; the palette lives in `ui/theme/` (fixed light scheme, no
+dynamic color).
 
 HTML extraction + the wait happen in a bundled GeckoView **WebExtension** under
 `app/src/main/assets/extensions/extractor/` (`content.js` reads the per-job spec via native messaging,

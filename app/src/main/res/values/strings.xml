@@ -1,3 +1,30 @@
 <resources>
     <string name="app_name">Meerkly</string>
+
+    <!-- Auth gate -->
+    <string name="gate_title">Hi! Let\'s sign you in</string>
+    <string name="gate_text">Meerkly helps out from your phone while you\'re not using it. Sign in with your Meerkly account and you\'re good to go.</string>
+    <string name="gate_cta">Sign in</string>
+    <string name="gate_cta_busy">Signing in…</string>
+    <string name="gate_hint">This opens your browser so you can sign in safely.</string>
+    <string name="gate_no_browser">No browser found on this device to sign in with.</string>
+
+    <!-- Dashboard -->
+    <string name="dash_connected">Connected</string>
+    <string name="dash_title">You\'re all set!</string>
+    <string name="dash_sub">Meerkly is running quietly in the background and helping out. You don\'t need to do a thing — just leave Meerkly open.</string>
+    <string name="dash_sign_out">Sign out</string>
+    <string name="device_linked">✓ Device linked</string>
+    <string name="earn_device_label">Earned on this device</string>
+    <string name="earn_device_value">$12.40</string>
+    <string name="earn_device_note">Since you set up Meerkly here</string>
+    <string name="earn_total_label">Total earned</string>
+    <string name="earn_total_value">$48.75</string>
+    <string name="earn_total_note">Across all your devices</string>
+    <string name="card_running_title">Up and running</string>
+    <string name="card_running_note">Meerkly is switched on and doing its thing.</string>
+    <string name="card_safe_title">Safe and private</string>
+    <string name="card_safe_note">We never touch your files or personal browsing.</string>
+    <string name="card_open_title">Keep it open</string>
+    <string name="card_open_note">Leave Meerkly running to keep on helping.</string>
 </resources>

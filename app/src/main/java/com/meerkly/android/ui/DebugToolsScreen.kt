@@ -13,7 +13,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -32,21 +31,23 @@ import com.meerkly.android.model.NavigationResult
 import kotlinx.coroutines.launch
 import java.io.File
 
+/**
+ * Debug-only URL tester (the original main screen): manual navigation with the
+ * full-size GeckoView, live status, machine info, and the log tail. The only
+ * on-device way to watch extraction happen — reachable via a long-press on the
+ * dashboard footer in debug builds.
+ */
 @Composable
-fun MainScreen(
+fun DebugToolsScreen(
     viewModel: MainViewModel,
     onShareDiagnostics: (File) -> Unit,
+    onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val status by viewModel.status.collectAsState()
     val logs by viewModel.logs.collectAsState()
     val scope = rememberCoroutineScope()
-    var url by remember {
-        mutableStateOf(
-            "https://www.google.com/search?q=casino+bonus" +
-                "&uule=w+CAIQICISVsOkc3RlcsOlcywgU3dlZGVu&gl=se&hl=sv"
-        )
-    }
+    var url by remember { mutableStateOf("https://example.com") }
 
     Column(
         modifier = modifier
@@ -54,7 +55,7 @@ fun MainScreen(
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        OutlinedTextField(
+        androidx.compose.material3.OutlinedTextField(
             value = url,
             onValueChange = { url = it },
             label = { Text("URL") },
@@ -68,7 +69,8 @@ fun MainScreen(
             OutlinedButton(onClick = { viewModel.onReload() }) { Text("Reload") }
             OutlinedButton(onClick = {
                 scope.launch { onShareDiagnostics(viewModel.buildDiagnostics()) }
-            }) { Text("Diagnostics") }
+            }) { Text("Diag") }
+            OutlinedButton(onClick = onClose) { Text("Close") }
         }
 
         StatusCard(status)
