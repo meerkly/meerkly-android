@@ -21,6 +21,11 @@ class GatewayClientFrameTest {
         arch = "arm64-v8a",
         appVersion = "1.0",
         engineVersion = "GeckoView 152",
+        cpuCores = 8,
+        memoryMb = 8192,
+        screen = "1080x2400",
+        timezone = "Europe/Stockholm",
+        locale = "sv-SE",
     )
 
     @Test
@@ -34,6 +39,11 @@ class GatewayClientFrameTest {
         val device = frame.getJSONObject("device")
         assertEquals("Google Pixel 8", device.getString("deviceModel"))
         assertEquals("GeckoView 152", device.getString("engineVersion"))
+        assertEquals(8, device.getInt("cpuCores"))
+        assertEquals(8192, device.getInt("memoryMb"))
+        assertEquals("1080x2400", device.getString("screen"))
+        assertEquals("Europe/Stockholm", device.getString("timezone"))
+        assertEquals("sv-SE", device.getString("locale"))
     }
 
     @Test

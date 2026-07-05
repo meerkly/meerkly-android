@@ -28,6 +28,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meerkly.android.R
 import com.meerkly.android.model.AuthStatus
+import com.meerkly.android.model.Credits
 import com.meerkly.android.ui.theme.Bone
 import com.meerkly.android.ui.theme.Cream
 import com.meerkly.android.ui.theme.Emerald
@@ -61,6 +64,7 @@ import com.meerkly.android.ui.theme.PinkDeep
 import com.meerkly.android.ui.theme.RoseDeep
 import com.meerkly.android.ui.theme.RoseSoft
 import com.meerkly.android.ui.theme.Sand
+import kotlinx.coroutines.delay
 
 /** The friendly signed-in home: hero, earnings placeholders, reassurance cards. */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -71,6 +75,18 @@ fun DashboardScreen(
     onFooterLongPress: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Earnings: refresh on entry, then poll while the dashboard is shown so the
+    // balance climbs as crawls are served. Until loaded the cards read 0 credits.
+    LaunchedEffect(Unit) {
+        while (true) {
+            viewModel.refreshCredits()
+            delay(CREDITS_POLL_MS)
+        }
+    }
+    val credits by viewModel.credits.collectAsState()
+    val myCredits = credits?.creditsFor(viewModel.machineInfo.machineId) ?: 0L
+    val totalCredits = credits?.totalCredits ?: 0L
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -88,14 +104,14 @@ fun DashboardScreen(
             auth.deviceLinkError?.let { DeviceLinkErrorBanner(it) }
             EarnCard(
                 label = stringResource(R.string.earn_device_label),
-                value = stringResource(R.string.earn_device_value),
-                note = stringResource(R.string.earn_device_note),
+                value = formatCredits(myCredits),
+                note = "${formatDollars(myCredits)} · ${stringResource(R.string.earn_device_note)}",
                 chip = { IconChip(listOf(Gold, GoldDeep)) { WalletIcon() } },
             )
             EarnCard(
                 label = stringResource(R.string.earn_total_label),
-                value = stringResource(R.string.earn_total_value),
-                note = stringResource(R.string.earn_total_note),
+                value = formatCredits(totalCredits),
+                note = "${formatDollars(totalCredits)} · ${stringResource(R.string.earn_total_note)}",
                 chip = { IconChip(listOf(Emerald, EmeraldDeep)) { TrendIcon() } },
             )
             ReassuranceCard(
@@ -117,6 +133,17 @@ fun DashboardScreen(
         Footer(viewModel, onLongPress = onFooterLongPress)
     }
 }
+
+// How often the dashboard re-fetches the balance while it's on screen, so it
+// climbs as crawls are served (credits land a few seconds after each crawl).
+private const val CREDITS_POLL_MS = 30_000L
+
+// "12,300 credits" — the earn cards show credits, not dollars.
+private fun formatCredits(credits: Long): String = "%,d credits".format(credits)
+
+// "≈ $0.02" — the dollar hint under a credit balance (500,000 credits = $1).
+private fun formatDollars(credits: Long): String =
+    "≈ $%.2f".format(credits / Credits.CREDITS_PER_DOLLAR)
 
 @Composable
 private fun TopBar(viewModel: MainViewModel, auth: AuthStatus.SignedIn) {

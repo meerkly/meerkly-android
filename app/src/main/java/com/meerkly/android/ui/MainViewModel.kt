@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.meerkly.android.MeerklyApp
 import com.meerkly.android.model.AuthStatus
 import com.meerkly.android.model.BrowserStatus
+import com.meerkly.android.model.Credits
 import com.meerkly.android.model.NavigationResult
 import com.meerkly.android.util.UrlValidator
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // Sign-in + device-link state driving the root UI (gate vs dashboard).
     val authStatus: StateFlow<AuthStatus> = graph.account.status
+
+    // The signed-in user's earnings for the dashboard cards (null until loaded).
+    val credits: StateFlow<Credits?> = graph.account.credits
+
+    /** Refresh earnings (e.g. when the dashboard is shown). */
+    fun refreshCredits() = graph.account.refreshCredits()
 
     private val _signingIn = MutableStateFlow(false)
     val signingIn: StateFlow<Boolean> = _signingIn.asStateFlow()

@@ -5,6 +5,8 @@ import android.content.Intent
 import android.net.Uri
 import com.meerkly.android.data.SecureStore
 import com.meerkly.android.logging.AppLogger
+import com.meerkly.android.model.Credits
+import com.meerkly.android.model.DeviceCredits
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -214,6 +216,32 @@ class AuthManager(
                 JSONObject(res.body?.string() ?: "").optString("email").takeIf { it.isNotBlank() }
             }
         }.onFailure { logger.warn("auth.userinfo_failed", mapOf("error" to it.message)) }.getOrNull()
+    }
+
+    /**
+     * Fetches the signed-in user's earnings from /api/credits. Returns null on
+     * any failure so the UI keeps its last value rather than showing a wrong one.
+     */
+    suspend fun fetchCredits(): Credits? = withContext(Dispatchers.IO) {
+        val accessToken = getAccessToken() ?: return@withContext null
+        runCatching {
+            http.newCall(
+                Request.Builder()
+                    .url("$baseUrl/api/credits")
+                    .header("Authorization", "Bearer $accessToken")
+                    .build(),
+            ).execute().use { res ->
+                if (!res.isSuccessful) return@use null
+                val json = JSONObject(res.body?.string() ?: "")
+                val devices = json.optJSONArray("devices")?.let { arr ->
+                    (0 until arr.length()).map { i ->
+                        val d = arr.getJSONObject(i)
+                        DeviceCredits(d.optString("machine_id"), d.optLong("credits"))
+                    }
+                }.orEmpty()
+                Credits(json.optLong("total_credits"), json.optDouble("dollars", 0.0), devices)
+            }
+        }.onFailure { logger.warn("auth.credits_failed", mapOf("error" to it.message)) }.getOrNull()
     }
 
     /** Dev-only: permits the cleartext Rails endpoints of debug builds. */

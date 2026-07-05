@@ -98,10 +98,12 @@ runtime, return to idle, let the user retry).
 
 ## Hard constraints (non-negotiable)
 
-- **Scope is local crawl + gateway worker.** The worker phase is live (WebSocket register +
-  `fetch`/`result` over `gateway/GatewayClient.kt`). Still **do not build** ahead of a new plan:
-  durable storage / DB, job queue, auth, artifact upload, object storage, geo-targeted selection,
-  payouts/earnings, policy engine, or any "Earn Mode" / wallet / worker-dashboard UI.
+- **Scope is local crawl + gateway worker + account/earnings display.** The worker phase is live
+  (WebSocket register + `fetch`/`result` over `gateway/GatewayClient.kt`), and the dashboard shows real
+  **credits** (`AuthManager.fetchCredits` → `GET /api/credits` → `AccountCoordinator.credits` →
+  `DashboardScreen` EarnCards). Still **do not build** ahead of a new plan: durable storage / DB, job
+  queue, artifact upload, object storage, geo-targeted selection, cash-out/payouts, policy engine, or
+  any wallet / worker-dashboard UI beyond the credit display.
 - **URL validation** (port of `src/shared/urlValidator.ts`): trim and reject empty; if no scheme,
   prepend `https://`; allow only `http`/`https`; **reject `file:`, `chrome:`, `about:`, `content:`,
   `javascript:`, `data:`**. Validate/normalize before every load.
@@ -163,6 +165,14 @@ applies `wait_for`/`wait_rules`/`settle_ms`/`detect_ms`, and pushes snapshots). 
 fire-and-forget snapshot, `setActive(true)`) — they're documented in detail in
 `api-gateway/CLAUDE.md` and commented in `GeckoBrowserManager.kt`. Re-test extraction on every
 GeckoView bump.
+
+The **page HTTP status** (for earnings/credits) is captured in `background.js` via a `webRequest`
+listener on `main_frame` responses (content scripts can't see status codes) — reset per top-level
+navigation so redirects settle on the final hop — and attached to the `page` message as `httpStatus`;
+it flows through `HtmlExtractor` → `GeckoBrowserManager.FetchOutcome` → the gateway `result`. The
+`webRequest` permission is in `manifest.json`. **If a GeckoView build doesn't expose `webRequest`,
+this degrades to `0` (unpaid) — never infer 2xx from a rendered page** (a 429/502 body would wrongly
+pay). Verify on-device after a GeckoView bump.
 
 ## Conventions
 

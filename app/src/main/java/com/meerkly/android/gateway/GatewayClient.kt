@@ -181,14 +181,14 @@ class GatewayClient(
                     val outcome = browserManager.navigateAndExtract(normalized, mode, settleMs, rules, detectMs)
                     val nav = outcome.nav
                     if (nav.success && outcome.html != null) {
-                        sendResult(ws, jobId, true, nav.finalUrl, nav.title, outcome.html, null, nav.loadedMs, outcome.waitTimedOut, outcome.matchedRule)
+                        sendResult(ws, jobId, true, nav.finalUrl, nav.title, outcome.html, null, nav.loadedMs, outcome.waitTimedOut, outcome.matchedRule, outcome.httpStatus)
                     } else {
                         val err = nav.error ?: "HTML extraction failed"
-                        sendResult(ws, jobId, false, nav.finalUrl, nav.title, null, err, nav.loadedMs, false, -1)
+                        sendResult(ws, jobId, false, nav.finalUrl, nav.title, null, err, nav.loadedMs, false, -1, outcome.httpStatus)
                     }
                 },
                 onFailure = { e ->
-                    sendResult(ws, jobId, false, null, null, null, e.message ?: "Invalid URL", null, false, -1)
+                    sendResult(ws, jobId, false, null, null, null, e.message ?: "Invalid URL", null, false, -1, 0)
                 },
             )
         }
@@ -205,6 +205,7 @@ class GatewayClient(
         loadedMs: Long?,
         waitTimedOut: Boolean,
         matchedRule: Int,
+        httpStatus: Int,
     ) {
         ws.send(
             MiniJson.encode(
@@ -219,6 +220,7 @@ class GatewayClient(
                     "loadedMs" to loadedMs,
                     "waitTimedOut" to waitTimedOut,
                     "matchedRule" to matchedRule,
+                    "httpStatus" to httpStatus,
                 ),
             ),
         )
@@ -249,6 +251,11 @@ class GatewayClient(
                     "arch" to info.arch,
                     "appVersion" to info.appVersion,
                     "engineVersion" to info.engineVersion,
+                    "cpuCores" to info.cpuCores,
+                    "memoryMb" to info.memoryMb,
+                    "screen" to info.screen,
+                    "timezone" to info.timezone,
+                    "locale" to info.locale,
                 ),
             )
             if (!deviceToken.isNullOrBlank()) {

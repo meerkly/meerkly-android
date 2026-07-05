@@ -16,10 +16,8 @@
     <string name="dash_sign_out">Sign out</string>
     <string name="device_linked">✓ Device linked</string>
     <string name="earn_device_label">Earned on this device</string>
-    <string name="earn_device_value">$12.40</string>
     <string name="earn_device_note">Since you set up Meerkly here</string>
     <string name="earn_total_label">Total earned</string>
-    <string name="earn_total_value">$48.75</string>
     <string name="earn_total_note">Across all your devices</string>
     <string name="card_running_title">Up and running</string>
     <string name="card_running_note">Meerkly is switched on and doing its thing.</string>

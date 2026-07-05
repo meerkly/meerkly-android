@@ -76,7 +76,7 @@ class GeckoBrowserManager(
     private var currentDetectMs: Int = 0
 
     /** Result of a fetch job: navigation outcome + extracted HTML + wait flags. */
-    data class FetchOutcome(val nav: NavigationResult, val html: String?, val waitTimedOut: Boolean, val matchedRule: Int = -1)
+    data class FetchOutcome(val nav: NavigationResult, val html: String?, val waitTimedOut: Boolean, val matchedRule: Int = -1, val httpStatus: Int = 0)
 
     /** One object fulfils all three delegate roles for the primary session. */
     private val delegate = object :
@@ -193,6 +193,7 @@ class GeckoBrowserManager(
                             html = o.optString("html"),
                             final = o.optBoolean("final", true),
                             matchedRule = o.optInt("matchedRule", -1),
+                            httpStatus = o.optInt("httpStatus", 0),
                         )
                     }
                     return null
@@ -307,7 +308,7 @@ class GeckoBrowserManager(
         } else {
             nav
         }
-        FetchOutcome(result, html, wantFinal && got == null && html != null, page?.matchedRule ?: -1)
+        FetchOutcome(result, html, wantFinal && got == null && html != null, page?.matchedRule ?: -1, page?.httpStatus ?: 0)
     }
 
     fun stopLoading() {

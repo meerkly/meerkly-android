@@ -48,6 +48,11 @@ class DeviceRegistrationManagerTest {
         arch = "arm64-v8a",
         appVersion = "1.0",
         engineVersion = "GeckoView 152",
+        cpuCores = 8,
+        memoryMb = 8192,
+        screen = "1080x2400",
+        timezone = "Europe/Stockholm",
+        locale = "sv-SE",
     )
 
     private lateinit var server: MockWebServer
