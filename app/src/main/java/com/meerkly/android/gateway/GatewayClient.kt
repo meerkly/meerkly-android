@@ -176,7 +176,8 @@ class GatewayClient(
         logger.info("gateway.fetch", mapOf("jobId" to jobId, "url" to url, "waitFor" to mode, "settleMs" to settleMs, "detectMs" to detectMs))
         // GeckoView session operations must run on the main thread.
         scope.launch(Dispatchers.Main) {
-            UrlValidator.validateAndNormalize(url).fold(
+            // blockPrivateHosts: remotely-dispatched jobs must not probe this device's own network.
+            UrlValidator.validateAndNormalize(url, blockPrivateHosts = true).fold(
                 onSuccess = { normalized ->
                     val outcome = browserManager.navigateAndExtract(normalized, mode, settleMs, rules, detectMs)
                     val nav = outcome.nav
