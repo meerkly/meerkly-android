@@ -114,15 +114,14 @@ class GatewayClient(
         override fun onMessage(ws: WebSocket, text: String) {
             val msg = runCatching { JSONObject(text) }.getOrNull() ?: return
             when (msg.optString("type")) {
-                "fetch" -> handleFetch(
-                    ws,
-                    msg.optString("jobId"),
-                    msg.optString("url"),
-                    msg.optString("waitFor"),
-                    msg.optInt("settleMs"),
-                    msg.optJSONArray("waitRules")?.toString() ?: "[]",
-                    msg.optInt("detectMs"),
-                )
+                "fetch" -> {
+                    val job = FetchFrame.parse(msg)
+                    if (job == null) {
+                        logger.warn("gateway.fetch.malformed", mapOf("raw" to text))
+                    } else {
+                        handleFetch(ws, job)
+                    }
+                }
                 "error" -> handleGatewayError(msg.optString("code"), msg.optString("message"))
                 else -> logger.info("gateway.message", mapOf("type" to msg.optString("type")))
             }
@@ -171,8 +170,9 @@ class GatewayClient(
     }
 
     /** Run a crawl job on the GeckoView session and return the HTML to the gateway. */
-    private fun handleFetch(ws: WebSocket, jobId: String, url: String, waitFor: String, settleMs: Int, rules: String, detectMs: Int) {
-        val mode = waitFor.ifEmpty { "stable" }
+    private fun handleFetch(ws: WebSocket, job: FetchJob) {
+        // Defaults already applied by FetchFrame.parse (spec semantics).
+        val (jobId, url, mode, settleMs, rules, detectMs) = job
         logger.info("gateway.fetch", mapOf("jobId" to jobId, "url" to url, "waitFor" to mode, "settleMs" to settleMs, "detectMs" to detectMs))
         // GeckoView session operations must run on the main thread.
         scope.launch(Dispatchers.Main) {
