@@ -23,6 +23,8 @@ object UrlValidator {
     private val ALLOWED = setOf("http", "https")
     private val FORBIDDEN = setOf("file", "chrome", "about", "content", "javascript", "data")
     private val SCHEME_RE = Regex("^([a-zA-Z][a-zA-Z0-9+.\\-]*):")
+    // Hex-group tail of a WHATWG-normalized IPv4-mapped IPv6 literal (::ffff:7f00:1).
+    private val MAPPED_V6_HEX = Regex("^([0-9a-f]{1,4}):([0-9a-f]{1,4})$")
 
     class ValidationException(message: String) : IllegalArgumentException(message)
 
@@ -82,7 +84,18 @@ object UrlValidator {
             if (ip == "::" || ip == "::1") return true // unspecified / loopback
             if (ip.length >= 3 && ip.startsWith("fe") && ip[2] in "89ab") return true // fe80::/10
             if (ip.length >= 2 && ip[0] == 'f' && ip[1] in "cd") return true // unique-local fc00::/7
-            if (ip.startsWith("::ffff:")) return isPrivateHost(ip.substring(7)) // IPv4-mapped
+            if (ip.startsWith("::ffff:")) {
+                // IPv4-mapped. DNS/dotted form (::ffff:127.0.0.1) recurses into the IPv4
+                // path; WHATWG-normalized hex groups (::ffff:7f00:1) are unpacked first.
+                val rest = ip.substring(7)
+                if (':' in rest) {
+                    val m = MAPPED_V6_HEX.matchEntire(rest) ?: return false
+                    val hi = m.groupValues[1].toInt(16)
+                    val lo = m.groupValues[2].toInt(16)
+                    return isPrivateHost("${(hi shr 8) and 0xff}.${hi and 0xff}.${(lo shr 8) and 0xff}.${lo and 0xff}")
+                }
+                return isPrivateHost(rest)
+            }
             return false
         }
 

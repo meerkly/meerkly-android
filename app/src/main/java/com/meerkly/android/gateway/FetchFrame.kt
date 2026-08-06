@@ -31,7 +31,7 @@ object FetchFrame {
     const val WAIT_FOR_DEFAULT = "stable"
     const val SETTLE_DEFAULT_MS = 5000
     const val SETTLE_MAX_MS = 25000
-    const val DETECT_DEFAULT_MS = 200
+    const val DETECT_DEFAULT_MS = 800
     const val DETECT_MAX_MS = 25000
 
     /**

@@ -117,6 +117,8 @@ class UrlValidatorTest {
             "http://[fd12:3456::1]",     // unique-local
             "http://[::ffff:127.0.0.1]", // IPv4-mapped loopback
             "http://[::ffff:10.0.0.1]",  // IPv4-mapped private
+            "http://[::ffff:7f00:1]",    // IPv4-mapped loopback, WHATWG hex form
+            "http://[::ffff:a00:1]",     // IPv4-mapped private (10.0.0.1), hex form
         )) {
             assertNull("expected $bad to be rejected", okBlocked(bad))
         }

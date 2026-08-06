@@ -16,7 +16,17 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 class HtmlExtractor(private val logger: AppLogger) {
 
-    data class Page(val url: String, val title: String?, val html: String, val final: Boolean, val matchedRule: Int = -1, val httpStatus: Int = 0)
+    data class Page(
+        val url: String,
+        val title: String?,
+        val html: String,
+        val final: Boolean,
+        val matchedRule: Int = -1,
+        val httpStatus: Int = 0,
+        /** How to read [html]: "json" when the document was a JSON media type
+         *  and the raw payload was captured, "html" for a rendered document. */
+        val format: String = "html",
+    )
 
     private var latest: Page? = null
     private var anyWaiter: CompletableDeferred<Page>? = null
@@ -28,9 +38,9 @@ class HtmlExtractor(private val logger: AppLogger) {
         finalWaiter = null
     }
 
-    fun onPage(url: String, title: String?, html: String, final: Boolean, matchedRule: Int = -1, httpStatus: Int = 0) {
+    fun onPage(url: String, title: String?, html: String, final: Boolean, matchedRule: Int = -1, httpStatus: Int = 0, format: String = "html") {
         logger.info("browser.extract_page", mapOf("bytes" to html.length, "final" to final, "matchedRule" to matchedRule, "httpStatus" to httpStatus))
-        val page = Page(url, title, html, final, matchedRule, httpStatus)
+        val page = Page(url, title, html, final, matchedRule, httpStatus, format)
         latest = page
         anyWaiter?.complete(page)
         anyWaiter = null

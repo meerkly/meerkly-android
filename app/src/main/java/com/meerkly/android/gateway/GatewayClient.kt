@@ -182,7 +182,7 @@ class GatewayClient(
                     val outcome = browserManager.navigateAndExtract(normalized, mode, settleMs, rules, detectMs)
                     val nav = outcome.nav
                     if (nav.success && outcome.html != null) {
-                        sendResult(ws, jobId, true, nav.finalUrl, nav.title, outcome.html, null, nav.loadedMs, outcome.waitTimedOut, outcome.matchedRule, outcome.httpStatus)
+                        sendResult(ws, jobId, true, nav.finalUrl, nav.title, outcome.html, null, nav.loadedMs, outcome.waitTimedOut, outcome.matchedRule, outcome.httpStatus, outcome.format)
                     } else {
                         val err = nav.error ?: "HTML extraction failed"
                         sendResult(ws, jobId, false, nav.finalUrl, nav.title, null, err, nav.loadedMs, false, -1, outcome.httpStatus)
@@ -207,6 +207,7 @@ class GatewayClient(
         waitTimedOut: Boolean,
         matchedRule: Int,
         httpStatus: Int,
+        format: String = "html",
     ) {
         ws.send(
             MiniJson.encode(
@@ -216,7 +217,8 @@ class GatewayClient(
                     "success" to success,
                     "finalUrl" to finalUrl,
                     "title" to title,
-                    "html" to html,
+                    "response" to html,
+                    "format" to format,
                     "error" to error,
                     "loadedMs" to loadedMs,
                     "waitTimedOut" to waitTimedOut,

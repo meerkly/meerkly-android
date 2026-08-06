@@ -26,13 +26,33 @@
   // the final snapshot so it's reported even if a required target later times out.
   var matchedRule = -1;
 
+  // A browser does not hand back JSON, it renders it -- Gecko into a <pre>, or
+  // the JSON viewer's own node when devtools are enabled. Either way
+  // outerHTML would bury the payload in markup a caller that asked for an API
+  // endpoint cannot use. This content script runs in an isolated world, so
+  // reading the DOM here is unaffected by the page's CSP.
+  function jsonPayload() {
+    try {
+      var ct = (document.contentType || "").split(";")[0].trim().toLowerCase();
+      var isJson = ct === "application/json" || ct === "text/json" || /\+json$/.test(ct);
+      if (!isJson) return null;
+      var el = document.querySelector("pre") || document.getElementById("json");
+      var text = el ? el.textContent : document.body ? document.body.textContent : null;
+      return text && text.trim() ? text : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   function snapshot(final) {
     try {
+      var payload = jsonPayload();
       browser.runtime.sendMessage({
         kind: "page",
         url: location.href,
         title: document.title,
-        html: document.documentElement.outerHTML,
+        html: payload !== null ? payload : document.documentElement.outerHTML,
+        format: payload !== null ? "json" : "html",
         final: !!final,
         matchedRule: matchedRule,
       });
@@ -109,7 +129,7 @@
       };
       var mo = new MutationObserver(check);
       var iv = setInterval(check, 250);
-      var cap = setTimeout(function () { finish(-1); }, Math.min(detectMs || 200, 25000));
+      var cap = setTimeout(function () { finish(-1); }, Math.min(detectMs || 800, 25000));
       var observe = function () {
         try { mo.observe(document.documentElement || document, { childList: true, subtree: true, attributes: true }); } catch (e) {}
         check();
