@@ -16,6 +16,10 @@ data class FetchJob(
     val settleMs: Int,
     val rulesJson: String,
     val detectMs: Int,
+    // Capture options: scripts/styles are stripped from the captured HTML by
+    // default (payload size over the uplink); true keeps them.
+    val includeScripts: Boolean,
+    val includeStyles: Boolean,
 )
 
 /**
@@ -57,6 +61,10 @@ object FetchFrame {
                 rules.put(JSONObject().put("if", guard).put("then", r.optString("then")))
             }
         }
-        return FetchJob(jobId, url, waitFor, settleMs, rules.toString(), detectMs)
+        return FetchJob(
+            jobId, url, waitFor, settleMs, rules.toString(), detectMs,
+            includeScripts = msg.optBoolean("includeScripts", false),
+            includeStyles = msg.optBoolean("includeStyles", false),
+        )
     }
 }

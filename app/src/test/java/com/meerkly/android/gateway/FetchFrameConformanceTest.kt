@@ -49,6 +49,8 @@ class FetchFrameConformanceTest {
             assertEquals(name, expected.getString("waitFor"), job.waitFor)
             assertEquals(name, expected.getInt("settleMs"), job.settleMs)
             assertEquals(name, expected.getInt("detectMs"), job.detectMs)
+            assertEquals(name, expected.getBoolean("includeScripts"), job.includeScripts)
+            assertEquals(name, expected.getBoolean("includeStyles"), job.includeStyles)
             val expectedRules = expected.getJSONArray("waitRules")
             val actualRules = org.json.JSONArray(job.rulesJson)
             assertEquals(name, expectedRules.length(), actualRules.length())

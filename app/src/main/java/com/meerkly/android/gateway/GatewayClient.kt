@@ -172,14 +172,17 @@ class GatewayClient(
     /** Run a crawl job on the GeckoView session and return the HTML to the gateway. */
     private fun handleFetch(ws: WebSocket, job: FetchJob) {
         // Defaults already applied by FetchFrame.parse (spec semantics).
-        val (jobId, url, mode, settleMs, rules, detectMs) = job
+        val (jobId, url, mode, settleMs, rules, detectMs, includeScripts, includeStyles) = job
         logger.info("gateway.fetch", mapOf("jobId" to jobId, "url" to url, "waitFor" to mode, "settleMs" to settleMs, "detectMs" to detectMs))
         // GeckoView session operations must run on the main thread.
         scope.launch(Dispatchers.Main) {
             // blockPrivateHosts: remotely-dispatched jobs must not probe this device's own network.
             UrlValidator.validateAndNormalize(url, blockPrivateHosts = true).fold(
                 onSuccess = { normalized ->
-                    val outcome = browserManager.navigateAndExtract(normalized, mode, settleMs, rules, detectMs)
+                    val outcome = browserManager.navigateAndExtract(
+                        normalized, mode, settleMs, rules, detectMs,
+                        includeScripts = includeScripts, includeStyles = includeStyles,
+                    )
                     val nav = outcome.nav
                     if (nav.success && outcome.html != null) {
                         sendResult(ws, jobId, true, nav.finalUrl, nav.title, outcome.html, null, nav.loadedMs, outcome.waitTimedOut, outcome.matchedRule, outcome.httpStatus, outcome.format)

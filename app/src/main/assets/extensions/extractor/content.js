@@ -15,16 +15,38 @@
 //   - <selector>: wait until a matching element is visible, then stable-settle.
 //
 // wait_rules (optional): an ordered list of { if: <guard sel>, then: <target> }.
-// All guards are probed for up to detect_ms (default 200ms — guards are expected to
-// be in the initial render, so a tiny window keeps the no-match case fast); the first rule (by list order) whose
-// guard becomes visible wins → we run its `then` target (like a wait mode). If no
-// guard appears within detect_ms, we run `waitFor` as the fallback. `matchedRule`
-// (the winning index, or -1) rides along on every snapshot so the app/gateway can
-// report which rule fired.
+// All guards are probed for up to detect_ms (default 800ms); the first rule (by
+// list order) whose guard becomes visible wins → we run its `then` target (like
+// a wait mode). If no guard appears within detect_ms, we run `waitFor` as the
+// fallback. `matchedRule` (the winning index, or -1) rides along on every
+// snapshot so the app/gateway can report which rule fired.
 (function () {
   // The wait_rules index that matched (-1 = none/fallback or no rules). Set before
   // the final snapshot so it's reported even if a required target later times out.
   var matchedRule = -1;
+
+  // Capture options from the spec: scripts/styles are stripped by default to
+  // shrink the payload. Initialized to "keep everything" because the early
+  // fallback snapshot fires BEFORE the spec round-trip — a full document is
+  // always a correct superset, while stripping something a job asked to keep
+  // would lose data on the timeout-fallback path.
+  var includeScripts = true;
+  var includeStyles = true;
+
+  // Serializes the document per the capture options. Stripping clones the root
+  // first — the live DOM is never mutated (later snapshots must see reality).
+  // Inline style attributes are always kept. Mirrors the desktop SDK's
+  // captureHtmlExpr and the headless snippets.py.
+  function captureHtml() {
+    if (includeScripts && includeStyles) return document.documentElement.outerHTML;
+    var r = document.documentElement.cloneNode(true);
+    var kill = [];
+    if (!includeScripts) kill.push("script");
+    if (!includeStyles) kill.push("style", 'link[rel="stylesheet"]');
+    var nodes = r.querySelectorAll(kill.join(","));
+    for (var i = 0; i < nodes.length; i++) nodes[i].remove();
+    return r.outerHTML;
+  }
 
   // A browser does not hand back JSON, it renders it -- Gecko into a <pre>, or
   // the JSON viewer's own node when devtools are enabled. Either way
@@ -51,7 +73,7 @@
         kind: "page",
         url: location.href,
         title: document.title,
-        html: payload !== null ? payload : document.documentElement.outerHTML,
+        html: payload !== null ? payload : captureHtml(),
         format: payload !== null ? "json" : "html",
         final: !!final,
         matchedRule: matchedRule,
@@ -190,6 +212,8 @@
     var settleMs = spec.settleMs;
     var rules = Array.isArray(spec.waitRules) ? spec.waitRules : [];
     var detectMs = spec.detectMs;
+    includeScripts = spec.includeScripts === true;
+    includeStyles = spec.includeStyles === true;
 
     if (rules.length) {
       onceDOMReady(async function () {

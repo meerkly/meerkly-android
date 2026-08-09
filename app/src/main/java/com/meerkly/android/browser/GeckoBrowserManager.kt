@@ -67,6 +67,15 @@ class GeckoBrowserManager(
     @Volatile
     private var currentSettleMs: Int = 0
 
+    /** Capture options for the in-flight job (spec default: strip both). Local
+     *  (non-gateway) navigations keep the full document via the parameter
+     *  defaults on navigateAndExtract. */
+    @Volatile
+    private var currentIncludeScripts: Boolean = true
+
+    @Volatile
+    private var currentIncludeStyles: Boolean = true
+
     /** wait_rules for the in-flight job, as a JSON array string ("[]" = none). */
     @Volatile
     private var currentRules: String = "[]"
@@ -185,6 +194,8 @@ class GeckoBrowserManager(
                                 .put("settleMs", currentSettleMs)
                                 .put("waitRules", JSONArray(currentRules))
                                 .put("detectMs", currentDetectMs)
+                                .put("includeScripts", currentIncludeScripts)
+                                .put("includeStyles", currentIncludeStyles)
                             return GeckoResult.fromValue(reply.toString() as Any)
                         }
                         "page" -> extractor.onPage(
@@ -283,12 +294,16 @@ class GeckoBrowserManager(
         settleMs: Int = 0,
         rules: String = "[]",
         detectMs: Int = 0,
+        includeScripts: Boolean = true,
+        includeStyles: Boolean = true,
         timeoutMs: Long = 30_000L,
     ): FetchOutcome = coroutineScope {
         currentWaitFor = waitFor
         currentSettleMs = settleMs
         currentRules = rules
         currentDetectMs = detectMs
+        currentIncludeScripts = includeScripts
+        currentIncludeStyles = includeStyles
         extractor.reset()
         val hasRules = runCatching { JSONArray(rules).length() > 0 }.getOrDefault(false)
         // domcontentloaded is satisfied by the early snapshot; the waiting modes —
