@@ -88,7 +88,26 @@ jobs:
             exit 1
           fi
 
+      # FetchFrameConformanceTest binds this worker to the canonical wire spec
+      # that also governs the gateway and the desktop/headless workers. It lives
+      # in the private api-gateway repo, which this public repo's GITHUB_TOKEN
+      # cannot read — hence a dedicated read-only token. Only spec/ is fetched,
+      # and nothing here is ever uploaded (artifacts come from dist/ alone).
+      - name: Check out the canonical protocol spec
+        uses: actions/checkout@v4
+        with:
+          repository: meerkly/api-gateway
+          token: ${{ secrets.SPEC_REPO_TOKEN }}
+          # Must be a relative path under the workspace; checkout rejects
+          # anything outside it.
+          path: spec-repo
+          sparse-checkout: spec
+
       - name: Tests and lint
+        # Without SPEC_DIR the conformance test fails rather than silently
+        # skipping — protocol drift must not be shippable.
+        env:
+          SPEC_DIR: ${{ github.workspace }}/spec-repo/spec
         run: ./gradlew testDebugUnitTest lintDebug
 
       - name: Decode keystore
