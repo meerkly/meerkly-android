@@ -1,13 +1,18 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto Backup rules for API <= 30. See data_extraction_rules.xml for 31+.
+
+  `meerkly_prefs` is excluded on purpose and must stay excluded. It holds two
+  things that are per-INSTALL, not per-user:
+
+  * machineId — the gateway keys live worker connections by it
+    (dispatch.workers[machineID]). Restoring a backup onto a second device
+    would put two live workers on one id and silently orphan one of them.
+  * The device token, encrypted with an AndroidKeyStore key that by design
+    never leaves the device — the restored ciphertext would be undecryptable.
+
+  A restored install is meant to mint a fresh machineId and re-pair.
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="sharedpref" path="meerkly_prefs.xml" />
 </full-backup-content>

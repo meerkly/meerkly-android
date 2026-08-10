@@ -11,6 +11,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
@@ -57,6 +60,18 @@ class GeckoBrowserManager(
     private var lastUrl: String? = null
     private var lastTitle: String? = null
 
+    /**
+     * What the session is showing right now, for the debug browser panel. Unlike
+     * [NavigationResult] this updates mid-flight (every page_start/location change)
+     * rather than once a job finalizes, so the panel tracks gateway-dispatched
+     * crawls as they happen — those never touch MainViewModel's status flow.
+     */
+    private val _liveUrl = MutableStateFlow<String?>(null)
+    val liveUrl: StateFlow<String?> = _liveUrl.asStateFlow()
+
+    private val _liveLoading = MutableStateFlow(false)
+    val liveLoading: StateFlow<Boolean> = _liveLoading.asStateFlow()
+
     private val extractor = HtmlExtractor(logger)
 
     /** wait_for spec for the in-flight job; handed to the content script on request. */
@@ -87,6 +102,7 @@ class GeckoBrowserManager(
     /** Result of a fetch job: navigation outcome + extracted HTML + wait flags. */
     data class FetchOutcome(val nav: NavigationResult, val html: String?, val waitTimedOut: Boolean, val matchedRule: Int = -1, val httpStatus: Int = 0, val format: String = "html")
 
+
     /** One object fulfils all three delegate roles for the primary session. */
     private val delegate = object :
         GeckoSession.ProgressDelegate,
@@ -95,6 +111,8 @@ class GeckoBrowserManager(
 
         override fun onPageStart(session: GeckoSession, url: String) {
             lastUrl = url
+            _liveUrl.value = url
+            _liveLoading.value = true
             // A (re)load started — cancel any pending finalize; this is a redirect continuation.
             finalizeJob?.cancel()
             logger.info("browser.page_start", mapOf("url" to url))
@@ -103,6 +121,7 @@ class GeckoBrowserManager(
         override fun onPageStop(session: GeckoSession, success: Boolean) {
             logger.info("browser.page_stop", mapOf("success" to success))
             lastSuccess = success
+            _liveLoading.value = false
             scheduleFinalize()
         }
 
@@ -112,7 +131,10 @@ class GeckoBrowserManager(
             perms: List<GeckoSession.PermissionDelegate.ContentPermission>,
             hasUserGesture: Boolean,
         ) {
-            if (url != null) lastUrl = url
+            if (url != null) {
+                lastUrl = url
+                _liveUrl.value = url
+            }
         }
 
         override fun onTitleChange(session: GeckoSession, title: String?) {
@@ -314,7 +336,7 @@ class GeckoBrowserManager(
         val nav = navigate(url, timeoutMs)
         if (!nav.success) {
             pageJob.cancel()
-            return@coroutineScope FetchOutcome(nav, null, false)
+            return@coroutineScope salvage(nav, extractor.latestPage())
         }
         val got = pageJob.await()
         val page = got ?: extractor.latestPage()
@@ -343,9 +365,38 @@ class GeckoBrowserManager(
         logger.info("browser.session_recovered")
     }
 
-    private companion object {
+    internal companion object {
         const val EXTENSION_URI = "resource://android/assets/extensions/extractor/"
         const val EXTENSION_ID = "extractor@meerkly"
         const val WaitDOMContentLoaded = "domcontentloaded"
+
+        /**
+         * Outcome for a navigation that did NOT complete, given whatever the
+         * extension managed to push before we gave up.
+         *
+         * A failed navigation does not mean we have nothing. Pages that hold a
+         * connection open (ads, long-polling, streaming) never fire onPageStop,
+         * so [navigate] times out even though the document rendered and a
+         * snapshot was already captured. Failing the whole job there returned a
+         * 502 with no HTML for pages that desktop/headless serve fine — they
+         * wait for DOM-ready, not full load, and report the document with
+         * wait_timed_out=true. Only report failure when there is genuinely
+         * nothing to hand back (rejected URL, crash before first paint).
+         */
+        internal fun salvage(nav: NavigationResult, page: HtmlExtractor.Page?): FetchOutcome {
+            val html = page?.html ?: return FetchOutcome(nav, null, false)
+            return FetchOutcome(
+                nav.copy(
+                    success = true,
+                    error = null,
+                    htmlSizeBytes = html.toByteArray(Charsets.UTF_8).size.toLong(),
+                ),
+                html,
+                waitTimedOut = true,
+                matchedRule = page.matchedRule,
+                httpStatus = page.httpStatus,
+                format = page.format,
+            )
+        }
     }
 }

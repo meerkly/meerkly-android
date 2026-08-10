@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Adaptive icon background layer (108x108dp, full-bleed — the OS applies its
+  own mask shape on top). Cream gradient + soft top glow lifted from the
+  desktop app icon (meerkly-desktop/resources/icon.svg). Source of truth for
+  scripts/generate-icons.sh; edit this, then re-run that script.
+-->
+<svg width="108" height="108" viewBox="0 0 108 108" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#faf4e8"/>
+      <stop offset="1" stop-color="#eee1c9"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="34%" r="62%">
+      <stop offset="0" stop-color="#fffdf6" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#fffdf6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="108" height="108" fill="url(#bg)"/>
+  <rect width="108" height="108" fill="url(#glow)"/>
+</svg>

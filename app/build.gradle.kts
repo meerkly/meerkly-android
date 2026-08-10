@@ -1,7 +1,25 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+// Release signing credentials, kept out of the repo (both sources are gitignored).
+// Either a keystore.properties beside settings.gradle.kts:
+//     storeFile=meerkly-release.jks   (path relative to the project root)
+//     storePassword=…
+//     keyAlias=…
+//     keyPassword=…
+// or the env vars MEERKLY_KEYSTORE_{FILE,PASSWORD} / MEERKLY_KEY_{ALIAS,PASSWORD} on CI.
+// Read through the provider API so the configuration cache tracks the file.
+val keystoreProps = Properties().apply {
+    providers.fileContents(rootProject.layout.projectDirectory.file("keystore.properties"))
+        .asText.orNull?.let { load(it.reader()) }
+}
+
+fun signingValue(key: String, env: String): String? =
+    keystoreProps.getProperty(key) ?: providers.environmentVariable(env).orNull
 
 android {
     namespace = "com.meerkly.android"
@@ -34,6 +52,18 @@ android {
         manifestPlaceholders["appAuthRedirectScheme"] = "com.meerkly.android"
     }
 
+    signingConfigs {
+        create("release") {
+            val store = signingValue("storeFile", "MEERKLY_KEYSTORE_FILE")
+            if (store != null) {
+                storeFile = rootProject.file(store)
+                storePassword = signingValue("storePassword", "MEERKLY_KEYSTORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "MEERKLY_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "MEERKLY_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // Dev gateway on the host's LAN IP so a physical device on the same
@@ -45,9 +75,22 @@ android {
             buildConfigField("String", "ACCOUNT_BASE_URL", "\"http://192.168.1.10:3000\"")
         }
         release {
+            // Production endpoints — must match @meerkly/sdk's defaults.ts, which
+            // is the cross-platform source of truth for these URLs.
+            buildConfigField("String", "GATEWAY_URL", "\"wss://gateway.meerkly.com/v1/connect\"")
+            buildConfigField("String", "ACCOUNT_BASE_URL", "\"https://account.meerkly.com\"")
+
+            // R8 stays off. It only shrinks Java/Kotlin bytecode, which is a rounding
+            // error next to GeckoView's native libraries — the actual size win comes
+            // from Play's per-ABI splits in the AAB. Not worth the reflection risk
+            // across GeckoView, AppAuth and the WebExtension bridge for that.
             optimization {
                 enable = false
             }
+
+            // Unsigned when no keystore is configured, so a plain `assembleRelease`
+            // still works for anyone without the signing material.
+            signingConfig = signingConfigs.getByName("release").takeIf { it.storeFile != null }
         }
     }
     compileOptions {

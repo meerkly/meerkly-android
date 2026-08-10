@@ -10,9 +10,26 @@
     <string name="gate_no_browser">No browser found on this device to sign in with.</string>
 
     <!-- Dashboard -->
-    <string name="dash_connected">Connected</string>
     <string name="dash_title">You\'re all set!</string>
     <string name="dash_sub">Meerkly is running quietly in the background and helping out. You don\'t need to do a thing — just leave Meerkly open.</string>
+    <string name="dash_title_connecting">Connecting…</string>
+    <string name="dash_sub_connecting">Meerkly is reaching out to the network. This usually only takes a moment.</string>
+    <string name="dash_title_offline">Can\'t reach Meerkly</string>
+    <string name="dash_sub_offline">You\'re not helping out right now. Meerkly keeps trying in the background and picks up again on its own — your credits are safe in the meantime.</string>
+    <string name="dash_title_unpaired">This device needs linking</string>
+    <string name="dash_sub_unpaired">Meerkly couldn\'t link this device to your account, so it can\'t help out yet. Try signing out and back in.</string>
+
+    <!-- Worker connection chip -->
+    <string name="conn_connected">Connected</string>
+    <string name="conn_connecting">Connecting…</string>
+    <string name="conn_offline">Offline</string>
+    <string name="conn_unpaired">Not linked</string>
+    <string name="conn_disabled">Off</string>
+
+    <!-- Earnings when the account service can't be reached -->
+    <string name="earn_unknown_note">Can\'t load right now</string>
+    <string name="credits_unavailable_title">Can\'t load your credits</string>
+    <string name="credits_unavailable_note">Your credits are stored on your Meerkly account and are safe — the app just can\'t reach the server right now. They\'ll reappear once it reconnects.</string>
     <string name="dash_sign_out">Sign out</string>
     <string name="device_linked">✓ Device linked</string>
     <string name="earn_device_label">Earned on this device</string>
@@ -21,8 +38,16 @@
     <string name="earn_total_note">Across all your devices</string>
     <string name="card_running_title">Up and running</string>
     <string name="card_running_note">Meerkly is switched on and doing its thing.</string>
+    <string name="card_paused_title">Paused for now</string>
+    <string name="card_paused_note">Meerkly isn\'t helping out until it reconnects. Nothing for you to fix.</string>
     <string name="card_safe_title">Safe and private</string>
     <string name="card_safe_note">We never touch your files or personal browsing.</string>
     <string name="card_open_title">Keep it open</string>
     <string name="card_open_note">Leave Meerkly running to keep on helping.</string>
+
+    <!-- Debug browser panel -->
+    <string name="browser_show">Show browser</string>
+    <string name="browser_hide">Hide browser</string>
+    <string name="browser_panel_title">Browser</string>
+    <string name="browser_panel_idle">Nothing loaded yet</string>
 </resources>

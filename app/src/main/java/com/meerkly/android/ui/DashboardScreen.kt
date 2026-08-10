@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -49,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meerkly.android.R
+import com.meerkly.android.gateway.WorkerConnection
 import com.meerkly.android.model.AuthStatus
 import com.meerkly.android.model.Credits
 import com.meerkly.android.ui.theme.Bone
@@ -61,6 +63,7 @@ import com.meerkly.android.ui.theme.Ink
 import com.meerkly.android.ui.theme.InkSoft
 import com.meerkly.android.ui.theme.Pink
 import com.meerkly.android.ui.theme.PinkDeep
+import com.meerkly.android.ui.theme.Rose
 import com.meerkly.android.ui.theme.RoseDeep
 import com.meerkly.android.ui.theme.RoseSoft
 import com.meerkly.android.ui.theme.Sand
@@ -72,6 +75,8 @@ import kotlinx.coroutines.delay
 fun DashboardScreen(
     viewModel: MainViewModel,
     auth: AuthStatus.SignedIn,
+    onToggleBrowser: () -> Unit,
+    browserVisible: Boolean,
     onFooterLongPress: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -84,8 +89,12 @@ fun DashboardScreen(
         }
     }
     val credits by viewModel.credits.collectAsState()
-    val myCredits = credits?.creditsFor(viewModel.machineInfo.machineId) ?: 0L
-    val totalCredits = credits?.totalCredits ?: 0L
+    val connection by viewModel.connection.collectAsState()
+    // Deliberately NOT defaulted to 0: an unreachable account service must read
+    // as "we don't know", not as "you have nothing".
+    val known = credits.creditsOrNull
+    val myCredits = known?.creditsFor(viewModel.machineInfo.machineId)
+    val totalCredits = known?.totalCredits
 
     Column(
         modifier = modifier
@@ -100,24 +109,41 @@ fun DashboardScreen(
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Hero()
+            Hero(connection)
             auth.deviceLinkError?.let { DeviceLinkErrorBanner(it) }
+            if (known == null) {
+                CreditsUnavailableBanner()
+            }
             EarnCard(
                 label = stringResource(R.string.earn_device_label),
-                value = formatCredits(myCredits),
-                note = "${formatDollars(myCredits)} · ${stringResource(R.string.earn_device_note)}",
+                value = myCredits?.let { formatCredits(it) } ?: UNKNOWN_VALUE,
+                note = myCredits?.let { "${formatDollars(it)} · ${stringResource(R.string.earn_device_note)}" }
+                    ?: stringResource(R.string.earn_unknown_note),
                 chip = { IconChip(listOf(Gold, GoldDeep)) { WalletIcon() } },
             )
             EarnCard(
                 label = stringResource(R.string.earn_total_label),
-                value = formatCredits(totalCredits),
-                note = "${formatDollars(totalCredits)} · ${stringResource(R.string.earn_total_note)}",
+                value = totalCredits?.let { formatCredits(it) } ?: UNKNOWN_VALUE,
+                note = totalCredits?.let { "${formatDollars(it)} · ${stringResource(R.string.earn_total_note)}" }
+                    ?: stringResource(R.string.earn_unknown_note),
                 chip = { IconChip(listOf(Emerald, EmeraldDeep)) { TrendIcon() } },
             )
+            // Must track the socket: "doing its thing" alongside an Offline hero
+            // is the same false reassurance the old static chip gave.
             ReassuranceCard(
-                title = stringResource(R.string.card_running_title),
-                note = stringResource(R.string.card_running_note),
-                chip = { IconChip(listOf(Emerald, EmeraldDeep)) { CheckIcon() } },
+                title = stringResource(
+                    if (connection.isEarning) R.string.card_running_title else R.string.card_paused_title,
+                ),
+                note = stringResource(
+                    if (connection.isEarning) R.string.card_running_note else R.string.card_paused_note,
+                ),
+                chip = {
+                    if (connection.isEarning) {
+                        IconChip(listOf(Emerald, EmeraldDeep)) { CheckIcon() }
+                    } else {
+                        IconChip(listOf(Gold, GoldDeep)) { CheckIcon() }
+                    }
+                },
             )
             ReassuranceCard(
                 title = stringResource(R.string.card_safe_title),
@@ -130,13 +156,21 @@ fun DashboardScreen(
                 chip = { IconChip(listOf(Pink, PinkDeep)) { HeartIcon() } },
             )
         }
-        Footer(viewModel, onLongPress = onFooterLongPress)
+        Footer(
+            viewModel,
+            onToggleBrowser = onToggleBrowser,
+            browserVisible = browserVisible,
+            onLongPress = onFooterLongPress,
+        )
     }
 }
 
 // How often the dashboard re-fetches the balance while it's on screen, so it
 // climbs as crawls are served (credits land a few seconds after each crawl).
 private const val CREDITS_POLL_MS = 30_000L
+
+// Stands in for a balance we don't have. An em dash, never "0" — see CreditsState.
+private const val UNKNOWN_VALUE = "—"
 
 // "12,300 credits" — the earn cards show credits, not dollars.
 private fun formatCredits(credits: Long): String = "%,d credits".format(credits)
@@ -188,19 +222,33 @@ private fun TopBar(viewModel: MainViewModel, auth: AuthStatus.SignedIn) {
 }
 
 @Composable
-private fun Hero() {
+private fun Hero(connection: WorkerConnection) {
+    // "You're all set" is only true when the worker is actually in the pool;
+    // otherwise say what's wrong instead of reassuring the user falsely.
+    val titleRes = when (connection) {
+        WorkerConnection.Connected -> R.string.dash_title
+        WorkerConnection.Connecting, WorkerConnection.Registering -> R.string.dash_title_connecting
+        WorkerConnection.Unpaired -> R.string.dash_title_unpaired
+        else -> R.string.dash_title_offline
+    }
+    val subRes = when (connection) {
+        WorkerConnection.Connected -> R.string.dash_sub
+        WorkerConnection.Connecting, WorkerConnection.Registering -> R.string.dash_sub_connecting
+        WorkerConnection.Unpaired -> R.string.dash_sub_unpaired
+        else -> R.string.dash_sub_offline
+    }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         MeerklyMascot(modifier = Modifier.size(width = 108.dp, height = 130.dp))
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            ConnectedChip()
+            ConnectionChip(connection)
             Text(
-                text = stringResource(R.string.dash_title),
+                text = stringResource(titleRes),
                 style = MaterialTheme.typography.headlineSmall,
                 fontFamily = FontFamily.Serif,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = stringResource(R.string.dash_sub),
+                text = stringResource(subRes),
                 style = MaterialTheme.typography.bodySmall,
                 color = InkSoft,
             )
@@ -208,14 +256,27 @@ private fun Hero() {
     }
 }
 
+/**
+ * The worker's real socket state. This used to be a static "Connected" label,
+ * which told people they were earning while the gateway was unreachable — the
+ * dot only pulses when the worker is genuinely in the dispatch pool.
+ */
 @Composable
-private fun ConnectedChip() {
+private fun ConnectionChip(connection: WorkerConnection) {
     val pulse by rememberInfiniteTransition(label = "live")
         .animateFloat(
             initialValue = 0.4f, targetValue = 1f,
             animationSpec = infiniteRepeatable(tween(1000, easing = LinearEasing), RepeatMode.Reverse),
             label = "liveAlpha",
         )
+    val (labelRes, dot) = when (connection) {
+        WorkerConnection.Connected -> R.string.conn_connected to Emerald
+        WorkerConnection.Connecting, WorkerConnection.Registering -> R.string.conn_connecting to Gold
+        WorkerConnection.Offline -> R.string.conn_offline to Rose
+        WorkerConnection.Unpaired -> R.string.conn_unpaired to Rose
+        WorkerConnection.Disconnected -> R.string.conn_offline to Rose
+        WorkerConnection.Disabled -> R.string.conn_disabled to InkSoft
+    }
     Surface(color = Cream, shape = RoundedCornerShape(999.dp), border = BorderStroke(1.dp, Sand)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -225,13 +286,34 @@ private fun ConnectedChip() {
             Box(
                 Modifier
                     .size(8.dp)
-                    .alpha(pulse)
-                    .background(Emerald, CircleShape),
+                    // Only the earning state animates; a steady dot reads as
+                    // "stopped" at a glance.
+                    .alpha(if (connection.isEarning) pulse else 1f)
+                    .background(dot, CircleShape),
             )
             Text(
-                stringResource(R.string.dash_connected),
+                stringResource(labelRes),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+/** Shown when we have no balance to show, so a blank figure never reads as "your credits are gone". */
+@Composable
+private fun CreditsUnavailableBanner() {
+    Surface(color = Cream, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, Sand)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                stringResource(R.string.credits_unavailable_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                stringResource(R.string.credits_unavailable_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = InkSoft,
             )
         }
     }
@@ -317,27 +399,50 @@ private fun ReassuranceCard(title: String, note: String, chip: @Composable () ->
 }
 
 @Composable
-private fun Footer(viewModel: MainViewModel, onLongPress: () -> Unit) {
+private fun Footer(
+    viewModel: MainViewModel,
+    onToggleBrowser: () -> Unit,
+    browserVisible: Boolean,
+    onLongPress: () -> Unit,
+) {
     val info = viewModel.machineInfo
     Surface(color = Bone) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .combinedClickable(onClick = {}, onLongClick = onLongPress)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                text = "Device ${info.machineId.take(8)}…",
-                style = MaterialTheme.typography.labelSmall,
-                fontFamily = FontFamily.Monospace,
-                color = InkSoft,
-            )
-            Text(
-                text = "v${info.appVersion} · Android ${info.androidSdk}",
-                style = MaterialTheme.typography.labelSmall,
-                color = InkSoft,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Device ${info.machineId.take(8)}…",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = InkSoft,
+                )
+                Text(
+                    text = "v${info.appVersion} · Android ${info.androidSdk}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = InkSoft,
+                )
+            }
+            // Debug view: watch gateway crawls happen in the automation browser.
+            TextButton(
+                onClick = onToggleBrowser,
+                modifier = Modifier.align(Alignment.Start),
+            ) {
+                Text(
+                    text = stringResource(
+                        if (browserVisible) R.string.browser_hide else R.string.browser_show,
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = InkSoft,
+                )
+            }
         }
     }
 }

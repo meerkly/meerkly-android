@@ -1,19 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup / device-transfer rules for API 31+. See backup_rules.xml for <= 30.
+  `meerkly_prefs` is excluded from BOTH paths — see backup_rules.xml for why
+  (machineId must be unique per live worker; the device token is sealed to a
+  non-exportable AndroidKeyStore key).
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="sharedpref" path="meerkly_prefs.xml" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="sharedpref" path="meerkly_prefs.xml" />
     </device-transfer>
-    -->
 </data-extraction-rules>

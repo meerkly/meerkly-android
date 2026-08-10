@@ -8,7 +8,8 @@ import androidx.lifecycle.viewModelScope
 import com.meerkly.android.MeerklyApp
 import com.meerkly.android.model.AuthStatus
 import com.meerkly.android.model.BrowserStatus
-import com.meerkly.android.model.Credits
+import com.meerkly.android.gateway.WorkerConnection
+import com.meerkly.android.model.CreditsState
 import com.meerkly.android.model.NavigationResult
 import com.meerkly.android.util.UrlValidator
 import kotlinx.coroutines.Dispatchers
@@ -43,11 +44,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // Sign-in + device-link state driving the root UI (gate vs dashboard).
     val authStatus: StateFlow<AuthStatus> = graph.account.status
 
-    // The signed-in user's earnings for the dashboard cards (null until loaded).
-    val credits: StateFlow<Credits?> = graph.account.credits
+    // The signed-in user's earnings for the dashboard cards. Unknown until a
+    // fetch succeeds — the UI must render that as "unknown", never as 0.
+    val credits: StateFlow<CreditsState> = graph.account.credits
+
+    /** Live worker socket state, so the dashboard can stop claiming "Connected". */
+    val connection: StateFlow<WorkerConnection> = graph.gatewayClient.connection
 
     /** Refresh earnings (e.g. when the dashboard is shown). */
     fun refreshCredits() = graph.account.refreshCredits()
+
+    /**
+     * Debug view: whether the automation browser is on screen. Mirrors the
+     * desktop's toggle-browser-window — the worker's GeckoView is always
+     * composed and active, this only decides whether it's expanded into a
+     * visible panel or collapsed to the offscreen 1dp surface extraction needs.
+     * Lives here (not in the manager) so it survives rotation with the rest of
+     * the UI state; the engine itself is unaffected either way.
+     */
+    private val _browserVisible = MutableStateFlow(false)
+    val browserVisible: StateFlow<Boolean> = _browserVisible.asStateFlow()
+
+    /** Show/hide the automation browser. Returns nothing — observe [browserVisible]. */
+    fun toggleBrowserVisible() {
+        _browserVisible.value = !_browserVisible.value
+    }
+
+    fun hideBrowser() {
+        _browserVisible.value = false
+    }
 
     private val _signingIn = MutableStateFlow(false)
     val signingIn: StateFlow<Boolean> = _signingIn.asStateFlow()

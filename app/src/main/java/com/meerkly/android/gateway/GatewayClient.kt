@@ -11,6 +11,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -59,6 +62,20 @@ class GatewayClient(
     internal var paused = false
         private set
 
+    /**
+     * Live socket state for the UI. Starts [WorkerConnection.Disabled] when no
+     * gateway is configured so a build that can never connect never claims to.
+     */
+    private val _connection = MutableStateFlow(
+        if (url.isBlank()) WorkerConnection.Disabled else WorkerConnection.Disconnected,
+    )
+    val connection: StateFlow<WorkerConnection> = _connection.asStateFlow()
+
+    /** Disabled is terminal — never let a transition talk a gateway-less build online. */
+    private fun setConnection(state: WorkerConnection) {
+        if (_connection.value != WorkerConnection.Disabled) _connection.value = state
+    }
+
     /** Open the connection and keep it alive, reconnecting with backoff on drop. No-op if running. */
     fun start() {
         if (url.isBlank()) {
@@ -96,11 +113,13 @@ class GatewayClient(
         reconnectJob?.cancel()
         webSocket?.close(NORMAL_CLOSURE, "client stopping")
         webSocket = null
+        setConnection(WorkerConnection.Disconnected)
     }
 
     private fun connect() {
         if (stopped || paused) return
         logger.info("gateway.connecting", mapOf("url" to url))
+        setConnection(WorkerConnection.Connecting)
         webSocket = client.newWebSocket(Request.Builder().url(url).build(), listener)
     }
 
@@ -108,6 +127,9 @@ class GatewayClient(
         override fun onOpen(ws: WebSocket, response: Response) {
             backoffMs = INITIAL_BACKOFF_MS
             logger.info("gateway.open")
+            // Open, but not in the dispatch pool until the gateway acks the
+            // register below — don't report Connected yet.
+            setConnection(WorkerConnection.Registering)
             ws.send(buildRegister(getDeviceToken()))
         }
 
@@ -122,6 +144,10 @@ class GatewayClient(
                         handleFetch(ws, job)
                     }
                 }
+                "registered" -> {
+                    logger.info("gateway.registered", mapOf("connectionId" to msg.optString("connectionId")))
+                    setConnection(WorkerConnection.Connected)
+                }
                 "error" -> handleGatewayError(msg.optString("code"), msg.optString("message"))
                 else -> logger.info("gateway.message", mapOf("type" to msg.optString("type")))
             }
@@ -134,14 +160,26 @@ class GatewayClient(
         override fun onClosed(ws: WebSocket, code: Int, reason: String) {
             if (ws !== webSocket) return // superseded by reconnect(); don't double-schedule
             logger.warn("gateway.closed", mapOf("code" to code, "reason" to reason))
+            reportDown()
             scheduleReconnect()
         }
 
         override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
             if (ws !== webSocket) return
             logger.error("gateway.failure", mapOf("error" to t.message))
+            reportDown()
             scheduleReconnect()
         }
+    }
+
+    /**
+     * The socket went away. A terminal auth rejection arrives as an `error`
+     * frame *followed by* the gateway closing, so Unpaired must survive the
+     * close that trails it — otherwise the UI would blame the network for what
+     * is really an unpaired device.
+     */
+    private fun reportDown() {
+        setConnection(if (paused) WorkerConnection.Unpaired else WorkerConnection.Offline)
     }
 
     /**
@@ -154,7 +192,12 @@ class GatewayClient(
         logger.warn("gateway.rejected", mapOf("code" to code, "message" to message))
         if (isTerminalAuthError(code)) {
             paused = true
+            setConnection(WorkerConnection.Unpaired)
             logger.warn("gateway.paused", mapOf("reason" to "device not paired / token invalid"))
+        } else {
+            // Retryable (verification_unavailable): the gateway closes after
+            // this, and normal backoff applies.
+            setConnection(WorkerConnection.Offline)
         }
     }
 

@@ -5,7 +5,7 @@ import com.meerkly.android.data.DeviceRegistrationManager
 import com.meerkly.android.gateway.GatewayClient
 import com.meerkly.android.logging.AppLogger
 import com.meerkly.android.model.AuthStatus
-import com.meerkly.android.model.Credits
+import com.meerkly.android.model.CreditsState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,9 +33,11 @@ class AccountCoordinator(
     val status: StateFlow<AuthStatus> = _status
 
     // The signed-in user's earnings, refreshed on sign-in, startup, and whenever
-    // the dashboard asks. Null until first loaded; kept on transient failures.
-    private val _credits = MutableStateFlow<Credits?>(null)
-    val credits: StateFlow<Credits?> = _credits
+    // the dashboard asks. Stays Unknown until a fetch actually succeeds — a
+    // failed refresh must never be rendered as a zero balance — and a later
+    // failure keeps the last loaded figure rather than clearing it.
+    private val _credits = MutableStateFlow<CreditsState>(CreditsState.Unknown)
+    val credits: StateFlow<CreditsState> = _credits
 
     /** Startup: restore session, gate the worker on pairing, heal if needed. */
     fun onAppStart() {
@@ -68,7 +70,7 @@ class AccountCoordinator(
     /** Sign out of the account; the device registration and worker keep going. */
     suspend fun signOut() {
         auth.signOut()
-        _credits.value = null
+        _credits.value = CreditsState.Unknown
         refreshStatus()
     }
 
@@ -78,7 +80,7 @@ class AccountCoordinator(
      */
     fun refreshCredits() {
         scope.launch {
-            auth.fetchCredits()?.let { _credits.value = it }
+            auth.fetchCredits()?.let { _credits.value = CreditsState.Loaded(it) }
         }
     }
 

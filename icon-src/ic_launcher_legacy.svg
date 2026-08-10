@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Meerkly app icon source (1024x1024).
+
+  Laid out on Apple's macOS icon grid: the rounded-square body is 824x824
+  centred in the 1024 canvas (100px transparent margin on each side, corner
+  radius 185). Do NOT draw to the canvas edge — a full-bleed icon renders
+  visibly larger than every other app in the Dock.
+
+  Palette + mascot geometry come from the renderer's auth-gate meerkat and the
+  OAuth callback coin. Rasterized by scripts/generate-icons.sh into
+  icon.icns / icon.ico / icon.png — edit this, then re-run that script.
+-->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#faf4e8"/>
+      <stop offset="1" stop-color="#eee1c9"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="34%" r="62%">
+      <stop offset="0" stop-color="#fffdf6" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#fffdf6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#dcab68"/>
+      <stop offset="1" stop-color="#bd8746"/>
+    </linearGradient>
+    <radialGradient id="coin" cx="35%" cy="28%" r="85%">
+      <stop offset="0" stop-color="#ffe6a3"/>
+      <stop offset="0.55" stop-color="#ffb43d"/>
+      <stop offset="1" stop-color="#f59000"/>
+    </radialGradient>
+    <!-- Apple-style icon body: 824x824 centred, leaving a 100px margin. -->
+    <clipPath id="squircle">
+      <rect x="100" y="100" width="824" height="824" rx="185"/>
+    </clipPath>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#3a2417" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  </g>
+
+  <g clip-path="url(#squircle)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#glow)"/>
+
+    <!-- ears (behind head) -->
+    <ellipse cx="338" cy="313" rx="60" ry="55" fill="url(#fur)"/>
+    <ellipse cx="336" cy="318" rx="29" ry="26" fill="#ffb3d4"/>
+    <ellipse cx="686" cy="313" rx="60" ry="55" fill="url(#fur)"/>
+    <ellipse cx="688" cy="318" rx="29" ry="26" fill="#ffb3d4"/>
+
+    <!-- head, peeking over the coin -->
+    <ellipse cx="512" cy="430" rx="205" ry="195" fill="url(#fur)"/>
+
+    <!-- dark eye patches -->
+    <ellipse cx="434" cy="406" rx="62" ry="76" fill="#3a2417" transform="rotate(-18 434 406)"/>
+    <ellipse cx="590" cy="406" rx="62" ry="76" fill="#3a2417" transform="rotate(18 590 406)"/>
+
+    <!-- eyes (pupils converge slightly — looking down at the coin) -->
+    <circle cx="437" cy="412" r="38" fill="#ffffff"/>
+    <circle cx="441" cy="416" r="26" fill="#2a1a10"/>
+    <circle cx="451" cy="403" r="11" fill="#ffffff"/>
+    <circle cx="587" cy="412" r="38" fill="#ffffff"/>
+    <circle cx="583" cy="416" r="26" fill="#2a1a10"/>
+    <circle cx="601" cy="403" r="11" fill="#ffffff"/>
+
+    <!-- paws gripping the coin rim -->
+    <circle cx="395" cy="505" r="42" fill="#c08c4c"/>
+    <circle cx="629" cy="505" r="42" fill="#c08c4c"/>
+
+    <!-- the gold $ coin, fully inside the icon body -->
+    <circle cx="512" cy="700" r="185" fill="url(#coin)" stroke="#d97e00" stroke-width="8"/>
+    <circle cx="512" cy="700" r="139" fill="none" stroke="#ffffff" stroke-opacity="0.55" stroke-width="10"/>
+    <!-- $ glyph drawn as strokes (no font dependency); source: OAuth callback coin -->
+    <g transform="translate(512,700) scale(7.9) translate(-24,-24)">
+      <path d="M24 12.5v23M28.8 17c-1.1-1.4-2.9-2.1-4.8-2.1-2.6 0-4.4 1.4-4.4 3.5 0 4.8 9.4 2.5 9.4 7.3 0 2.2-2 3.7-5 3.7-2.1 0-4-0.8-5.1-2.3"
+            fill="none" stroke="#8a4a00" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- sparkles -->
+    <path d="M800 213 L809 246 L842 255 L809 264 L800 297 L791 264 L758 255 L791 246 Z" fill="#ffd57f"/>
+    <path d="M250 561 L255 580 L274 585 L255 590 L250 609 L245 590 L226 585 L245 580 Z" fill="#ffd57f"/>
+  </g>
+</svg>
