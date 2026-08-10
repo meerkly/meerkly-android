@@ -34,7 +34,7 @@ android {
         // GeckoView 152's AAR declares minSdkVersion 26, so 26 (Android 8.0) is the real floor.
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
+        versionCode = 2
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
