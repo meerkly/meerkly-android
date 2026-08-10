@@ -42,9 +42,17 @@ Keep that file and its passwords in 1Password — losing them means an upload-ke
 reset with Google. Then add four repo secrets:
 
   gh secret set MEERKLY_KEYSTORE_BASE64 < <(base64 -i meerkly-release.jks)
-  gh secret set MEERKLY_KEYSTORE_PASSWORD
-  gh secret set MEERKLY_KEY_ALIAS          # "meerkly" above
-  gh secret set MEERKLY_KEY_PASSWORD
+  gh secret set MEERKLY_KEYSTORE_PASSWORD  # unlocks the keystore file
+  gh secret set MEERKLY_KEY_ALIAS          # the entry name: "meerkly" above
+  gh secret set MEERKLY_KEY_PASSWORD       # SAME as the keystore password
+
+The last two trip people up. The alias names one key inside the keystore (a
+keystore can hold several) — `keytool -list -keystore meerkly-release.jks`
+prints it. The key password is nominally separate from the store password, but
+keytool writes PKCS12 by default and PKCS12 has no per-entry password: it warns
+"Different store and key passwords not supported for PKCS12 KeyStores" and
+ignores -keypass. So give both password secrets the same value, or signing
+fails with a wrong-password error on a password that looks correct.
 
 For local signed builds instead, put storeFile/storePassword/keyAlias/keyPassword
 in keystore.properties (gitignored) — see app/build.gradle.kts.
