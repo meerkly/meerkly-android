@@ -36,6 +36,11 @@ class GatewayConnectionStateTest {
     @Volatile
     private var serverSocket: WebSocket? = null
 
+    /** Tracked so teardown can always stop it — including when a test fails
+     *  mid-way and never reaches its own stop() call. A client left holding the
+     *  socket is what makes MockWebServer.shutdown() hang. */
+    private var gateway: GatewayClient? = null
+
     private fun client(url: String, token: String? = "tok-1"): GatewayClient {
         val app = RuntimeEnvironment.getApplication() as Application
         return GatewayClient(
@@ -46,14 +51,22 @@ class GatewayConnectionStateTest {
             browserManager = GeckoBrowserManager(app, NoopLogger()),
             url = url,
             getDeviceToken = { token },
-        )
+        ).also { gateway = it }
     }
 
     @After
     fun tearDown() {
+        // Client first: it owns the live connection, and MockWebServer can't
+        // drain its queue while one is still open.
+        gateway?.stop()
+        gateway = null
         serverSocket?.close(1000, "test over")
         serverSocket = null
-        if (::server.isInitialized) server.shutdown()
+        // Even with both ends closed, shutdown() waits on its dispatcher queue
+        // and can exceed its internal deadline on a loaded CI runner. Every
+        // assertion has already run by here, so teardown noise must not be able
+        // to fail the test — it reports as a bug in behaviour that is fine.
+        if (::server.isInitialized) runCatching { server.shutdown() }
     }
 
     /** Boots a gateway that accepts the socket and replies with whatever [onRegister] returns. */
