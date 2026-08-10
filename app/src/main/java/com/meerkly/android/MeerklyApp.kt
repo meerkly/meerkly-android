@@ -18,6 +18,8 @@ import com.meerkly.android.gateway.GatewayClient
 import com.meerkly.android.logging.AppLogger
 import com.meerkly.android.logging.JsonlFileLogger
 import com.meerkly.android.logging.LogRetention
+import com.meerkly.android.worker.WorkerPrefs
+import com.meerkly.android.worker.WorkerServiceLauncher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -87,7 +89,16 @@ class AppGraph(app: Application) {
         app, machineId, geckoVersion, logger, browserManager, BuildConfig.GATEWAY_URL,
         getDeviceToken = { deviceRegistration.getDeviceToken() },
     )
-    val account = AccountCoordinator(authManager, deviceRegistration, gatewayClient, logger, scope)
+    val workerPrefs = WorkerPrefs(app)
+    val account = AccountCoordinator(
+        authManager, deviceRegistration, gatewayClient, logger, scope,
+        // Sticky Stop: the coordinator must not resurrect a worker the user
+        // turned off (startup heal, sign-in reconnect).
+        isWorkerEnabled = { workerPrefs.workerEnabled },
+        // Pairing succeeded during interactive sign-in (app foreground) — a
+        // legal moment to raise the foreground service.
+        onWorkerEligible = { WorkerServiceLauncher.startIfEligible(app, this) },
+    )
 
     init {
         runCatching { LogRetention.apply(logDir, LocalDate.now(ZoneOffset.UTC)) }

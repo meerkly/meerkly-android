@@ -112,8 +112,27 @@ runtime, return to idle, let the user retry).
 - **Logging/diagnostics:** JSONL entries `{ ts, level, event, machine_id, data }`. Do **not** put
   full page HTML in logs or in diagnostics by default (it can contain private content) — only
   requested URL, final URL, title, duration, success/failure unless the user opts in.
-- **Permissions:** `INTERNET` is required (worker WebSocket + page loads). No foreground-service
-  permission unless/until a service actually exists.
+- **Permissions:** the closed set is `INTERNET`, `ACCESS_NETWORK_STATE`, plus the always-on
+  worker's block: `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_SPECIAL_USE` (WorkerService),
+  `RECEIVE_BOOT_COMPLETED` (BootReceiver), `POST_NOTIFICATIONS` (ongoing notification, 33+),
+  `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (Doze exemption nudge), `WAKE_LOCK` (held per fetch
+  job ≤45s, never standing). Do not add more without a plan.
+
+## Always-on worker service (`worker/`)
+
+`worker/WorkerService.kt` is a **thin `specialUse` foreground service**: `AppGraph` stays the owner
+of the gateway/browser objects; the service owns only the startForeground posture and the ongoing
+notification (text tracks `GatewayClient.connection`; single action = Stop). Type is `specialUse`
+on purpose — `dataSync` is capped at 6h/day on Android 15+ and can't launch from boot — and needs a
+Play Console declaration at release. Start paths all funnel through
+`WorkerServiceLauncher.startIfEligible` (eligible = `worker_enabled` pref && device token && non-blank
+`GATEWAY_URL`): `MainActivity.onStart`, post-pairing (`AccountCoordinator.onWorkerEligible`),
+`BootReceiver` on BOOT_COMPLETED (fires after first unlock — the token needs the Keystore), and
+START_STICKY restart. **Invariant: an explicit user Stop is sticky** — the notification action and
+the dashboard control persist `worker_enabled=false` (`worker/WorkerPrefs.kt`, `meerkly_prefs`) and
+every auto-start path checks it; nothing may restart the worker until the user presses Start.
+Sign-out remains orthogonal (never stops the worker; desktop-mirrored). A user force-stop from
+system settings blocks restart until the next app open — accepted OS behavior.
 
 ## Gateway worker (live, gated on device pairing)
 

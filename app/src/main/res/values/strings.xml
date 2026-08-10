@@ -11,7 +11,7 @@
 
     <!-- Dashboard -->
     <string name="dash_title">You\'re all set!</string>
-    <string name="dash_sub">Meerkly is running quietly in the background and helping out. You don\'t need to do a thing — just leave Meerkly open.</string>
+    <string name="dash_sub">Meerkly is running quietly in the background and helping out — even when your screen is off. You don\'t need to do a thing.</string>
     <string name="dash_title_connecting">Connecting…</string>
     <string name="dash_sub_connecting">Meerkly is reaching out to the network. This usually only takes a moment.</string>
     <string name="dash_title_offline">Can\'t reach Meerkly</string>
@@ -42,8 +42,39 @@
     <string name="card_paused_note">Meerkly isn\'t helping out until it reconnects. Nothing for you to fix.</string>
     <string name="card_safe_title">Safe and private</string>
     <string name="card_safe_note">We never touch your files or personal browsing.</string>
-    <string name="card_open_title">Keep it open</string>
-    <string name="card_open_note">Leave Meerkly running to keep on helping.</string>
+    <!-- Worker-control card (replaces the old "Keep it open" card) -->
+    <string name="worker_card_on_title">Running in the background</string>
+    <string name="worker_card_on_note">Meerkly keeps helping even with the screen locked. Stop any time.</string>
+    <string name="worker_card_off_title">Meerkly is stopped</string>
+    <string name="worker_card_off_note">You turned Meerkly off, so it isn\'t helping or earning. Start it again whenever you like.</string>
+    <string name="worker_stop">Stop</string>
+    <string name="worker_start">Start</string>
+
+    <!-- Stopped-state hero (distinct from Offline — the user chose this) -->
+    <string name="dash_title_stopped">Taking a break</string>
+    <string name="dash_sub_stopped">Meerkly is switched off and not earning. Hit Start when you\'re ready to help out again.</string>
+
+    <!-- Ongoing worker notification -->
+    <string name="notif_channel_name">Background worker</string>
+    <string name="notif_title">Meerkly</string>
+    <string name="notif_text_connected">Helping out</string>
+    <string name="notif_text_connecting">Connecting…</string>
+    <string name="notif_text_offline">Reconnecting…</string>
+    <string name="notif_text_unpaired">Needs linking — open the app</string>
+    <string name="notif_action_stop">Stop</string>
+
+    <!-- Getting started checklist (hides itself once every step is done) -->
+    <string name="setup_title">Getting started</string>
+    <string name="setup_progress">%1$d of %2$d done</string>
+    <string name="setup_allow">Allow</string>
+    <string name="setup_signed_in_title">Sign in</string>
+    <string name="setup_signed_in_note">You\'re signed in to your Meerkly account.</string>
+    <string name="setup_linked_title">Link this device</string>
+    <string name="setup_linked_note">Connects this phone to your account so it can earn.</string>
+    <string name="setup_notifications_title">Allow notifications</string>
+    <string name="setup_notifications_note">Lets Meerkly show what it\'s doing and gives you a quick way to stop it.</string>
+    <string name="setup_battery_title">Keep running in the background</string>
+    <string name="setup_battery_note">Android pauses background apps to save battery, which stops Meerkly earning while your phone is idle.</string>
 
     <!-- Debug browser panel -->
     <string name="browser_show">Show browser</string>

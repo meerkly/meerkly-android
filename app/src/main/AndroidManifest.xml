@@ -5,6 +5,19 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Always-on worker (WorkerService, specialUse FGS): keeps the crawl
+         worker connected while backgrounded/screen-locked. This is the full,
+         closed permission set for it — do not add more without a plan. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Doze suspends network for foreground services too; the exemption (user
+         consented via system dialog) is what keeps an idle phone earning. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Held only per fetch job (<=45s) so a crawl survives the screen turning off. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <application
         android:name=".MeerklyApp"
         android:allowBackup="true"
@@ -27,6 +40,26 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".worker.WorkerService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps this device's crawl worker connected to the Meerkly gateway so it can serve fetch jobs while the app is in the background or the screen is locked; runs until the user stops it from the notification or dashboard." />
+        </service>
+
+        <!-- BOOT_COMPLETED is a protected broadcast (system-only sender);
+             exported is required to receive it. Fires after first unlock, so
+             the Keystore-backed device token is readable. -->
+        <receiver
+            android:name=".worker.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

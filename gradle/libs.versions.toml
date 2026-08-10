@@ -1,6 +1,8 @@
 [versions]
 agp = "9.2.1"
-coreKtx = "1.10.1"
+# >= 1.12 needed for the typed ServiceCompat.startForeground(service, id, notification, type)
+# overload used by WorkerService (specialUse FGS on targetSdk 34+).
+coreKtx = "1.13.1"
 junit = "4.13.2"
 junitVersion = "1.1.5"
 espressoCore = "3.5.1"

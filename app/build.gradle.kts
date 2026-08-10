@@ -64,6 +64,32 @@ android {
         }
     }
 
+    // GeckoView ships a ~75 MB native library per ABI, so a universal APK is
+    // ~530 MB — unusable as a download. Release builds pass `-PabiSplits` to
+    // emit one ~100 MB APK per ABI instead. Opt-in so the local dev loop keeps
+    // packaging a single APK. (Bundles split themselves; this doesn't affect
+    // bundleRelease, which is still what goes to Play.)
+    splits {
+        abi {
+            isEnable = providers.gradleProperty("abiSplits").isPresent
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = false
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // Same opt-in: on the direct-download path the APK IS the download,
+            // and GeckoView's uncompressed .so files dominate it. Compressing
+            // them costs install time and disk (the system extracts them) but
+            // roughly halves what someone pulls over mobile data. Play builds
+            // (bundleRelease) never take this branch and keep the modern
+            // uncompressed-and-aligned layout.
+            useLegacyPackaging = providers.gradleProperty("abiSplits").isPresent
+        }
+    }
+
     buildTypes {
         debug {
             // Dev gateway on the host's LAN IP so a physical device on the same

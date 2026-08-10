@@ -1,0 +1,196 @@
+name: Release
+
+# Tag-driven, draft first — mirrors unblocked-app's release flow.
+#
+#   scripts/release.sh 1.1        # bumps versionName/versionCode, commits, tags v1.1
+#   git push --follow-tags
+#
+# That builds signed per-ABI APKs and opens a DRAFT release. Download one,
+# install it on a real phone, check it runs — then press Publish. That press is
+# what makes it "latest".
+#
+# Requires four repo secrets (see scripts/release.sh --help for how to make
+# them). Without them the build fails loudly rather than shipping an unsigned
+# APK, which Android refuses to install.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build (e.g. v1.1)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  # Never cancel a release mid-upload — a half-populated release is worse than
+  # a slow one.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      versionName: ${{ steps.check.outputs.versionName }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Tag must match versionName
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.tag || github.ref_name }}"
+          name=$(grep -oE 'versionName = "[^"]+"' app/build.gradle.kts | head -1 | sed -E 's/.*"(.*)"/\1/')
+          if [ "$tag" != "v$name" ]; then
+            echo "::error::Tag $tag does not match versionName $name in app/build.gradle.kts."
+            echo "Use scripts/release.sh so the two stay in step."
+            exit 1
+          fi
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+          echo "versionName=$name" >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag"
+
+  build:
+    name: Build signed APKs
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      # Matches gradle/gradle-daemon-jvm.properties (toolchainVersion=21).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Check signing secrets are present
+        shell: bash
+        env:
+          KEYSTORE: ${{ secrets.MEERKLY_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE" ]; then
+            echo "::error::MEERKLY_KEYSTORE_BASE64 is not set."
+            echo "An unsigned APK cannot be installed, so there is no point building one."
+            echo "Add the four signing secrets — see scripts/release.sh --help."
+            exit 1
+          fi
+
+      - name: Tests and lint
+        run: ./gradlew testDebugUnitTest lintDebug
+
+      - name: Decode keystore
+        shell: bash
+        env:
+          KEYSTORE: ${{ secrets.MEERKLY_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          # Outside the repo tree so it can never be picked up by a build scan
+          # or accidentally archived with the outputs.
+          echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Assemble release APKs
+        env:
+          MEERKLY_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          MEERKLY_KEYSTORE_PASSWORD: ${{ secrets.MEERKLY_KEYSTORE_PASSWORD }}
+          MEERKLY_KEY_ALIAS: ${{ secrets.MEERKLY_KEY_ALIAS }}
+          MEERKLY_KEY_PASSWORD: ${{ secrets.MEERKLY_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease -PabiSplits
+
+      - name: Refuse to ship anything unsigned
+        shell: bash
+        run: |
+          set -euo pipefail
+          # An -unsigned.apk here means the signing config silently didn't
+          # apply; publishing it would give people a file they can't install.
+          if ls app/build/outputs/apk/release/*unsigned*.apk >/dev/null 2>&1; then
+            echo "::error::Signing did not apply — found an unsigned APK."
+            ls -l app/build/outputs/apk/release/
+            exit 1
+          fi
+
+      - name: Name the APKs for humans
+        shell: bash
+        env:
+          VERSION_NAME: ${{ needs.verify.outputs.versionName }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for apk in app/build/outputs/apk/release/*.apk; do
+            # app-arm64-v8a-release.apk -> meerkly-1.1-arm64-v8a.apk
+            abi=$(basename "$apk" | sed -E 's/^app-(.*)-release\.apk$/\1/')
+            cp "$apk" "dist/meerkly-${VERSION_NAME}-${abi}.apk"
+          done
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meerkly-apks
+          retention-days: 3
+          if-no-files-found: error
+          path: dist/*.apk
+
+  release:
+    name: Draft release
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Collect APKs
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Show what we're about to publish
+        shell: bash
+        run: ls -lh artifacts
+
+      - name: Create or update the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Idempotent: re-running the workflow for a tag refreshes its assets
+          # rather than erroring on an existing release.
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION exists — replacing its assets."
+          else
+            gh release create "$VERSION" \
+              --draft \
+              --title "Meerkly $VERSION" \
+              --generate-notes
+          fi
+          gh release upload "$VERSION" artifacts/*.apk --clobber
+
+      - name: Next step
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          {
+            echo "### Draft release $VERSION is ready :package:"
+            echo ""
+            echo "Grab **meerkly-*-arm64-v8a.apk** for any phone from the last several years"
+            echo "(\`armeabi-v7a\` for older 32-bit devices, \`x86_64\` for emulators),"
+            echo "install it on a real device and check it runs — then **Publish release**."
+            echo ""
+            echo "https://github.com/${{ github.repository }}/releases"
+          } >> "$GITHUB_STEP_SUMMARY"

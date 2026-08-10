@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+    Status-bar small icon for the worker notification. Must be a pure-alpha
+    silhouette (the system tints it), so this is the launcher mascot reduced to
+    its two registering shapes: head with ears over the coin, $ knocked out.
+    Geometry derived from icon-src/ic_launcher_monochrome.svg (1024-space
+    coords / 42.67 -> 24dp box).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- left ear -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M4.9,6.4 a2.5,2.3 0 1,0 5,0 a2.5,2.3 0 1,0 -5,0 Z" />
+    <!-- right ear -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M14.1,6.4 a2.5,2.3 0 1,0 5,0 a2.5,2.3 0 1,0 -5,0 Z" />
+    <!-- head, both eyes knocked out via even-odd subpaths -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M7.2,9.4 a4.8,4.6 0 1,0 9.6,0 a4.8,4.6 0 1,0 -9.6,0 Z
+            M9.2,9.1 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0 Z
+            M12.6,9.1 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0 Z" />
+    <!-- coin: ring with a thick $-stroke knocked out via even-odd -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M12,12.4 a5.3,5.3 0 1,0 0,10.6 a5.3,5.3 0 1,0 0,-10.6 Z
+            M12,14.2 a3.5,3.5 0 1,1 0,7 a3.5,3.5 0 1,1 0,-7 Z" />
+    <!-- $ bar inside the coin -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M11.25,14.6 h1.5 v6.2 h-1.5 Z" />
+</vector>

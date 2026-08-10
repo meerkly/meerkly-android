@@ -15,8 +15,17 @@ import com.meerkly.android.diagnostics.DiagnosticsExporter
 import com.meerkly.android.ui.MainViewModel
 import com.meerkly.android.ui.RootScreen
 import com.meerkly.android.ui.theme.MeerklyTheme
+import com.meerkly.android.worker.WorkerServiceLauncher
 
 class MainActivity : ComponentActivity() {
+
+    override fun onStart() {
+        super.onStart()
+        // App is foregrounded — the always-legal moment to (re)raise the worker
+        // service. No-ops unless enabled + paired (WorkerServiceLauncher).
+        WorkerServiceLauncher.startIfEligible(this, (application as MeerklyApp).graph)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

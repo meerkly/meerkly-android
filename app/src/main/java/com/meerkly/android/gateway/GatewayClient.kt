@@ -1,6 +1,7 @@
 package com.meerkly.android.gateway
 
 import android.content.Context
+import android.os.PowerManager
 import com.meerkly.android.browser.GeckoBrowserManager
 import com.meerkly.android.data.DeviceInfo
 import com.meerkly.android.logging.AppLogger
@@ -217,27 +218,39 @@ class GatewayClient(
         // Defaults already applied by FetchFrame.parse (spec semantics).
         val (jobId, url, mode, settleMs, rules, detectMs, includeScripts, includeStyles) = job
         logger.info("gateway.fetch", mapOf("jobId" to jobId, "url" to url, "waitFor" to mode, "settleMs" to settleMs, "detectMs" to detectMs))
+        // Screen-off crawls: the foreground service keeps the process alive, but
+        // nothing else guarantees the CPU stays up through the 30s crawl window.
+        // Scoped to the job with a hard timeout — never a standing wakelock.
+        val wakeLock = runCatching {
+            (appContext.getSystemService(Context.POWER_SERVICE) as PowerManager)
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "meerkly:fetch")
+                .apply { acquire(FETCH_WAKELOCK_MS) }
+        }.getOrNull()
         // GeckoView session operations must run on the main thread.
         scope.launch(Dispatchers.Main) {
-            // blockPrivateHosts: remotely-dispatched jobs must not probe this device's own network.
-            UrlValidator.validateAndNormalize(url, blockPrivateHosts = true).fold(
-                onSuccess = { normalized ->
-                    val outcome = browserManager.navigateAndExtract(
-                        normalized, mode, settleMs, rules, detectMs,
-                        includeScripts = includeScripts, includeStyles = includeStyles,
-                    )
-                    val nav = outcome.nav
-                    if (nav.success && outcome.html != null) {
-                        sendResult(ws, jobId, true, nav.finalUrl, nav.title, outcome.html, null, nav.loadedMs, outcome.waitTimedOut, outcome.matchedRule, outcome.httpStatus, outcome.format)
-                    } else {
-                        val err = nav.error ?: "HTML extraction failed"
-                        sendResult(ws, jobId, false, nav.finalUrl, nav.title, null, err, nav.loadedMs, false, -1, outcome.httpStatus)
-                    }
-                },
-                onFailure = { e ->
-                    sendResult(ws, jobId, false, null, null, null, e.message ?: "Invalid URL", null, false, -1, 0)
-                },
-            )
+            try {
+                // blockPrivateHosts: remotely-dispatched jobs must not probe this device's own network.
+                UrlValidator.validateAndNormalize(url, blockPrivateHosts = true).fold(
+                    onSuccess = { normalized ->
+                        val outcome = browserManager.navigateAndExtract(
+                            normalized, mode, settleMs, rules, detectMs,
+                            includeScripts = includeScripts, includeStyles = includeStyles,
+                        )
+                        val nav = outcome.nav
+                        if (nav.success && outcome.html != null) {
+                            sendResult(ws, jobId, true, nav.finalUrl, nav.title, outcome.html, null, nav.loadedMs, outcome.waitTimedOut, outcome.matchedRule, outcome.httpStatus, outcome.format)
+                        } else {
+                            val err = nav.error ?: "HTML extraction failed"
+                            sendResult(ws, jobId, false, nav.finalUrl, nav.title, null, err, nav.loadedMs, false, -1, outcome.httpStatus)
+                        }
+                    },
+                    onFailure = { e ->
+                        sendResult(ws, jobId, false, null, null, null, e.message ?: "Invalid URL", null, false, -1, 0)
+                    },
+                )
+            } finally {
+                runCatching { if (wakeLock?.isHeld == true) wakeLock.release() }
+            }
         }
     }
 
@@ -282,6 +295,9 @@ class GatewayClient(
         private const val NORMAL_CLOSURE = 1000
         private const val INITIAL_BACKOFF_MS = 1_000L
         private const val MAX_BACKOFF_MS = 30_000L
+
+        /** Crawl budget (30s) + margin; hard cap so a leaked lock self-releases. */
+        private const val FETCH_WAKELOCK_MS = 45_000L
 
         /** Terminal = retrying with the same token would fail again. */
         internal fun isTerminalAuthError(code: String) = code == "device_auth_failed"

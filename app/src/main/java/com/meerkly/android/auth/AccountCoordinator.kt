@@ -28,6 +28,11 @@ class AccountCoordinator(
     private val gateway: GatewayClient,
     private val logger: AppLogger,
     private val scope: CoroutineScope,
+    // Sticky user Stop: when false, nothing here may start/reconnect the
+    // worker. Injected (with the eligibility callback) so this class stays
+    // Android-free.
+    private val isWorkerEnabled: () -> Boolean = { true },
+    private val onWorkerEligible: () -> Unit = {},
 ) {
     private val _status = MutableStateFlow<AuthStatus>(AuthStatus.Loading)
     val status: StateFlow<AuthStatus> = _status
@@ -44,6 +49,8 @@ class AccountCoordinator(
         scope.launch {
             auth.load()
             when {
+                !isWorkerEnabled() ->
+                    logger.info("account.gateway_deferred", mapOf("reason" to "worker stopped by user"))
                 registration.getDeviceToken() != null -> gateway.start()
                 auth.isSignedIn -> {
                     // Signed in before pairing existed (or a prior attempt
@@ -87,10 +94,13 @@ class AccountCoordinator(
     private suspend fun registerAndConnect() {
         val accessToken = auth.getAccessToken() ?: return
         val link = registration.register(accessToken)
-        if (link.deviceLinked) {
+        if (link.deviceLinked && isWorkerEnabled()) {
             // Fresh token must be presented immediately (also clears a paused
             // client after a terminal auth failure).
             gateway.reconnect()
+            // Paired during an interactive sign-in — raise the foreground
+            // service so the worker survives backgrounding from here on.
+            onWorkerEligible()
         }
     }
 

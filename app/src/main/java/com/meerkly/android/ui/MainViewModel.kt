@@ -1,8 +1,14 @@
 package com.meerkly.android.ui
 
+import android.Manifest
 import android.app.Application
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.meerkly.android.MeerklyApp
@@ -12,6 +18,7 @@ import com.meerkly.android.gateway.WorkerConnection
 import com.meerkly.android.model.CreditsState
 import com.meerkly.android.model.NavigationResult
 import com.meerkly.android.util.UrlValidator
+import com.meerkly.android.worker.WorkerServiceLauncher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -50,6 +57,87 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Live worker socket state, so the dashboard can stop claiming "Connected". */
     val connection: StateFlow<WorkerConnection> = graph.gatewayClient.connection
+
+    // ---- Background worker control (sticky Stop / Start) -------------------
+
+    private val _workerEnabled = MutableStateFlow(graph.workerPrefs.workerEnabled)
+    val workerEnabled: StateFlow<Boolean> = _workerEnabled.asStateFlow()
+
+    /**
+     * The user's explicit Stop/Start. Stop persists (nothing auto-restarts —
+     * not boot, not app open) until Start is pressed again.
+     */
+    fun setWorkerEnabled(enabled: Boolean) {
+        graph.workerPrefs.workerEnabled = enabled
+        _workerEnabled.value = enabled
+        val app = getApplication<Application>()
+        if (enabled) {
+            graph.gatewayClient.start()
+            WorkerServiceLauncher.startIfEligible(app, graph)
+            graph.logger.info("worker.started_by_user", mapOf("via" to "dashboard"))
+        } else {
+            graph.gatewayClient.stop()
+            WorkerServiceLauncher.stop(app)
+            graph.logger.info("worker.stopped_by_user", mapOf("via" to "dashboard"))
+        }
+    }
+
+    /**
+     * Re-read everything the dashboard mirrors. Called on every resume: the
+     * notification's Stop, the battery exemption and the notification
+     * permission can all change while we're backgrounded (or in a system
+     * settings screen the checklist sent the user to).
+     */
+    fun refreshWorkerState() {
+        _workerEnabled.value = graph.workerPrefs.workerEnabled
+        refreshBatteryExemption()
+        refreshNotificationsGranted()
+    }
+
+    // ---- Setup checklist state ---------------------------------------------
+
+    private val _batteryExempt = MutableStateFlow(true)
+    val batteryExempt: StateFlow<Boolean> = _batteryExempt.asStateFlow()
+
+    private val _notificationsGranted = MutableStateFlow(true)
+    val notificationsGranted: StateFlow<Boolean> = _notificationsGranted.asStateFlow()
+
+    /** Recomputed on every dashboard resume — the exemption changes outside the app. */
+    fun refreshBatteryExemption() {
+        val app = getApplication<Application>()
+        val pm = app.getSystemService(PowerManager::class.java)
+        _batteryExempt.value = pm?.isIgnoringBatteryOptimizations(app.packageName) ?: true
+    }
+
+    fun refreshNotificationsGranted() {
+        val app = getApplication<Application>()
+        _notificationsGranted.value =
+            Build.VERSION.SDK_INT < SetupChecklist.NOTIFICATION_PERMISSION_SDK ||
+            ContextCompat.checkSelfPermission(app, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
+    /** App notification settings — where a permanently-denied step has to go. */
+    fun notificationSettingsIntent(): Intent =
+        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, getApplication<Application>().packageName)
+
+    /**
+     * System dialog asking to exempt Meerkly from battery optimizations (Doze
+     * suspends the worker's network otherwise). Some OEMs strip the direct
+     * dialog — fall back to the settings list.
+     */
+    fun batteryExemptionIntent(): Intent {
+        val direct = Intent(
+            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            Uri.parse("package:${getApplication<Application>().packageName}"),
+        )
+        return if (direct.resolveActivity(getApplication<Application>().packageManager) != null) {
+            direct
+        } else {
+            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+        }
+    }
 
     /** Refresh earnings (e.g. when the dashboard is shown). */
     fun refreshCredits() = graph.account.refreshCredits()
