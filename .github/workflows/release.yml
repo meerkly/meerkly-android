@@ -63,6 +63,10 @@ jobs:
     name: Build signed APKs
     needs: verify
     runs-on: ubuntu-latest
+    env:
+      # Lifted to the job env because `secrets` is not usable in a step-level
+      # `if:` — this is what lets the Play upload skip cleanly when unset.
+      PLAY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -187,6 +191,29 @@ jobs:
           retention-days: 14
           if-no-files-found: error
           path: app/build/outputs/bundle/release/*.aab
+
+      # Ships the bundle to Play's internal track as a DRAFT — the same
+      # verify-then-publish shape as the GitHub release above, so nothing
+      # reaches testers (let alone production) without someone pressing a
+      # button. Promote it in the Play Console.
+      #
+      # Skipped, loudly, when the service account isn't configured: the Play
+      # API cannot create an app's *first* release, so that upload has to be
+      # done by hand before this can ever work.
+      - name: Publish to Play (internal, draft)
+        if: env.PLAY_JSON != ''
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ env.PLAY_JSON }}
+          packageName: com.meerkly.android
+          releaseFiles: app/build/outputs/bundle/release/app-release.aab
+          track: internal
+          status: draft
+
+      - name: Note when the Play upload was skipped
+        if: env.PLAY_JSON == ''
+        run: |
+          echo "::notice::PLAY_SERVICE_ACCOUNT_JSON not set — bundle built but not uploaded to Play. Download the meerkly-aab artifact and upload it by hand."
 
   release:
     name: Draft release
