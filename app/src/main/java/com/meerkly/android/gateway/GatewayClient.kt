@@ -42,7 +42,22 @@ class GatewayClient(
     private val machineId: String,
     private val geckoVersion: String?,
     private val logger: AppLogger,
-    private val browserManager: GeckoBrowserManager,
+    /**
+     * The one thing this client needs from the browser: run a crawl and hand
+     * back the outcome. Injected as a function rather than the manager itself
+     * so the whole fetch path can be exercised without a GeckoRuntime — the
+     * absence of that seam is why a missing feed-recording call shipped
+     * unnoticed.
+     */
+    private val fetchPage: suspend (
+        url: String,
+        waitFor: String,
+        settleMs: Int,
+        rulesJson: String,
+        detectMs: Int,
+        includeScripts: Boolean,
+        includeStyles: Boolean,
+    ) -> GeckoBrowserManager.FetchOutcome,
     private val url: String,
     private val getDeviceToken: () -> String? = { null },
     /**
@@ -240,11 +255,15 @@ class GatewayClient(
                 // blockPrivateHosts: remotely-dispatched jobs must not probe this device's own network.
                 UrlValidator.validateAndNormalize(url, blockPrivateHosts = true).fold(
                     onSuccess = { normalized ->
-                        val outcome = browserManager.navigateAndExtract(
+                        val outcome = fetchPage(
                             normalized, mode, settleMs, rules, detectMs,
-                            includeScripts = includeScripts, includeStyles = includeStyles,
+                            includeScripts, includeStyles,
                         )
                         val nav = outcome.nav
+                        // Record every finished crawl, success or failure — the
+                        // Activity feed is the app's proof of work, and one that
+                        // hid failures would be dishonest.
+                        onNavigation(nav)
                         if (nav.success && outcome.html != null) {
                             sendResult(ws, jobId, true, nav.finalUrl, nav.title, outcome.html, null, nav.loadedMs, outcome.waitTimedOut, outcome.matchedRule, outcome.httpStatus, outcome.format)
                         } else {

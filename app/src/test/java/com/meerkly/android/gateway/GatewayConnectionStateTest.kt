@@ -1,7 +1,6 @@
 package com.meerkly.android.gateway
 
 import android.app.Application
-import com.meerkly.android.browser.GeckoBrowserManager
 import com.meerkly.android.data.NoopLogger
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -48,7 +47,8 @@ class GatewayConnectionStateTest {
             machineId = "m-1",
             geckoVersion = "152",
             logger = NoopLogger(),
-            browserManager = GeckoBrowserManager(app, NoopLogger()),
+            // These tests only exercise connection state; no crawl is dispatched.
+            fetchPage = { _, _, _, _, _, _, _ -> error("no fetch expected in a connection test") },
             url = url,
             getDeviceToken = { token },
         ).also { gateway = it }

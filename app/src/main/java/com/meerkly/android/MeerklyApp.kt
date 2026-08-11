@@ -86,7 +86,14 @@ class AppGraph(app: Application) {
         store = secureStore,
     )
     val gatewayClient = GatewayClient(
-        app, machineId, geckoVersion, logger, browserManager, BuildConfig.GATEWAY_URL,
+        app, machineId, geckoVersion, logger,
+        fetchPage = { url, waitFor, settleMs, rules, detectMs, scripts, styles ->
+            browserManager.navigateAndExtract(
+                url, waitFor, settleMs, rules, detectMs,
+                includeScripts = scripts, includeStyles = styles,
+            )
+        },
+        url = BuildConfig.GATEWAY_URL,
         getDeviceToken = { deviceRegistration.getDeviceToken() },
         onNavigation = { recentRepo.record(it) },
     )
