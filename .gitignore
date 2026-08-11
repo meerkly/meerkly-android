@@ -19,3 +19,9 @@ local.properties
 /keystore.properties
 *.jks
 *.keystore
+
+# Build outputs. Android Studio's "Generate Signed App Bundle / APK" wizard
+# writes to app/release/ rather than app/build/, so it escapes the /build rule
+# above — and an .aab is ~240 MB.
+/app/release/
+*.aab

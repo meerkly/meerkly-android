@@ -166,6 +166,28 @@ jobs:
           if-no-files-found: error
           path: dist/*.apk
 
+      # The Play upload artifact. Deliberately NOT -PabiSplits: that flag is the
+      # direct-download path (per-ABI APKs with compressed native libs, to cut
+      # what someone pulls over mobile data). A bundle splits itself, and Play
+      # wants the modern uncompressed-and-aligned layout.
+      - name: Bundle for Play
+        env:
+          MEERKLY_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          MEERKLY_KEYSTORE_PASSWORD: ${{ secrets.MEERKLY_KEYSTORE_PASSWORD }}
+          MEERKLY_KEY_ALIAS: ${{ secrets.MEERKLY_KEY_ALIAS }}
+          MEERKLY_KEY_PASSWORD: ${{ secrets.MEERKLY_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease
+
+      # A workflow artifact, not a release asset: an .aab is not installable, so
+      # putting it on the public release page would just invite people to
+      # download 240 MB they can't use.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meerkly-aab
+          retention-days: 14
+          if-no-files-found: error
+          path: app/build/outputs/bundle/release/*.aab
+
   release:
     name: Draft release
     needs: [verify, build]
