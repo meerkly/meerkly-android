@@ -9,10 +9,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meerkly.android.diagnostics.DiagnosticsExporter
 import com.meerkly.android.ui.MainViewModel
 import com.meerkly.android.ui.RootScreen
+import com.meerkly.android.ui.nav.Destination
 import com.meerkly.android.ui.theme.MeerklyTheme
 import com.meerkly.android.worker.WorkerServiceLauncher
 
 class MainActivity : ComponentActivity() {
+
+    private companion object {
+        const val EXTRA_SCREEN = "meerkly.screen"
+    }
 
     override fun onStart() {
         super.onStart()
@@ -33,6 +38,13 @@ class MainActivity : ComponentActivity() {
                 // insets instead (top bar = status bar, nav bar = navigation bar).
                 RootScreen(
                     viewModel = vm,
+                    // Debug-only: lets scripts/screenshots.sh open a specific
+                    // tab instead of tapping coordinates that move at every
+                    // screen size. Ignored in release so it can't be driven
+                    // from outside.
+                    startDestination = Destination.fromKey(
+                        intent?.getStringExtra(EXTRA_SCREEN),
+                    )?.takeIf { BuildConfig.DEBUG } ?: Destination.Home,
                     onShareDiagnostics = { file ->
                         val intent = DiagnosticsExporter.shareIntent(this@MainActivity, file)
                         startActivity(Intent.createChooser(intent, "Share diagnostics"))

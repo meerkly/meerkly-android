@@ -114,6 +114,35 @@ class DesignRenderTest {
         }
     }
 
+    @Test
+    fun `navigation bar shows every icon, not just the selected one`() {
+        render("navbar", widthDp = 411, heightDp = 96) {
+            androidx.compose.foundation.layout.Box(
+                Modifier.fillMaxSize(),
+                contentAlignment = androidx.compose.ui.Alignment.BottomCenter,
+            ) { MeerklyNavigationBarPreview() }
+        }
+    }
+
+    @Test
+    fun `top bar aligns with the content below it`() {
+        render("topbar", widthDp = 411, heightDp = 420) {
+            androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+                MeerklyTopBar(
+                    auth = com.meerkly.android.model.AuthStatus.SignedIn(
+                        email = "rk@wkequity.com", deviceLinked = true,
+                    ),
+                    width = com.meerkly.android.ui.nav.WindowWidth.Compact,
+                )
+                ActivityContent(
+                    rows = sampleRows(),
+                    summary = ActivityFeed.Summary(pages = 37, succeeded = 35, medianMs = 840),
+                    workerEnabled = true, twoPane = false, selectedKey = null, onSelect = {},
+                )
+            }
+        }
+    }
+
     private fun sampleRows(): List<ActivityFeed.Row> {
         val now = java.time.Instant.parse("2026-08-11T12:00:00Z")
         fun r(host: String, path: String, ok: Boolean, ms: Long, mins: Long, title: String?) =

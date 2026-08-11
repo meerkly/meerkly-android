@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -101,5 +103,7 @@ internal fun IconChip(gradient: List<Color>, icon: @Composable () -> Unit) {
             .size(42.dp)
             .background(Brush.linearGradient(gradient), RoundedCornerShape(13.dp)),
         contentAlignment = Alignment.Center,
-    ) { icon() }
+        // The chip owns its content colour: its icons sit on a saturated
+        // gradient and must stay white wherever the chip is used.
+    ) { CompositionLocalProvider(LocalContentColor provides Cream) { icon() } }
 }

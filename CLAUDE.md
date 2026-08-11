@@ -196,13 +196,33 @@ Mirrors the desktop flow (`oauth.ts` / `deviceRegistration.ts` / `index.ts`):
 
 ## UI (cream & ink)
 
-`ui/RootScreen.kt` switches Loading → `AuthGateScreen` → `DashboardScreen` on `AuthStatus`, keeping a
+`ui/RootScreen.kt` switches Loading → `AuthGateScreen` → `MainScaffold` on `AuthStatus`, keeping a
 **persistent 1dp invisible `GeckoViewHost` composed at all times** — extraction needs an attached
 active surface and fetch jobs run regardless of the visible screen. Never compose two hosts at once
-(single `GeckoSession`). The old URL tester lives on as `ui/DebugToolsScreen.kt` (debug builds only,
-long-press the dashboard footer); it swaps in its own full-size host. Brand art (mascot/coin/icons)
-is Compose Canvas in `ui/BrandArt.kt`; the palette lives in `ui/theme/` (fixed light scheme, no
-dynamic color).
+(single `GeckoSession`), and never put the host inside `BoxWithConstraints`/`LazyColumn`/`key()` —
+it stays the last child of RootScreen's plain outer `Box`. The old URL tester lives on as
+`ui/DebugToolsScreen.kt` (debug builds only, long-press the engine row in Settings); it swaps in its
+own full-size host. Brand art (mascot/coin) is Compose Canvas in `ui/BrandArt.kt`, stroke icons in
+`ui/components/StrokeIcons.kt`; the palette lives in `ui/theme/` (fixed light scheme, no dynamic
+color). Display type is **Fraunces** (`ui/theme/Type.kt`, bundled variable font, `opsz` pinned to 72)
+— the same face account.meerkly.com uses; never reach for `FontFamily.Serif`, which is Noto Serif.
+
+**Four tabs** (`MainScaffold` + `ui/nav/`): Home, Activity, Devices, Settings. Navigation is a
+hand-rolled `Destination` enum + `NavState` (pure data, `rememberSaveable`), **not**
+navigation-compose — a NavHost would swap composables per destination (so the Gecko host would sit
+outside it anyway) and add a competing back-stack dispatcher. Back order: browser panel → debug
+screen → compact detail → non-Home tab → system. Adaptive width comes from `BoxWithConstraints` +
+`WindowWidth` (pure, unit-tested; Material's 600/840dp breakpoints) rather than
+`material3-window-size-class`, whose `calculateWindowSizeClass()` needs an Activity and can't be
+tested on the JVM. Compact = bottom bar; ≥600dp = rail; ≥840dp = two-pane for Activity/Devices.
+Content goes through `components/ContentColumn` so nothing stretches on a tablet, and the top bar
+shares its 20dp gutter so the wordmark lines up with the cards.
+
+**The credits poll and the ON_RESUME refresh live in `MainScaffold`, not a screen** — on a screen
+they stop the moment the user changes tab. `ui/DesignRenderTest.kt` renders screens to PNG on the
+JVM (Robolectric, native graphics) for design review without a device; it asserts nothing. Screens
+that need to be renderable take **plain state + lambdas**, not `MainViewModel` (which drags in
+`AppGraph` and a `GeckoRuntime`) — see `ActivityContent`.
 
 HTML extraction + the wait happen in a bundled GeckoView **WebExtension** under
 `app/src/main/assets/extensions/extractor/` (`content.js` reads the per-job spec via native messaging,

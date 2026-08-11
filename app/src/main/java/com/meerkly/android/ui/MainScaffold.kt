@@ -86,7 +86,7 @@ fun MainScaffold(
         BackHandler(enabled = backEnabled && nav.canGoBack(width)) { nav.back(width) }
 
         Column(Modifier.fillMaxSize()) {
-            MeerklyTopBar(viewModel, auth)
+            MeerklyTopBar(auth, width)
             Row(Modifier.weight(1f)) {
                 if (width.usesRail) {
                     MeerklyNavigationRail(nav.destination, nav::go)
@@ -122,7 +122,7 @@ fun MainScaffold(
 }
 
 @Composable
-private fun MeerklyNavigationBar(current: Destination, onSelect: (Destination) -> Unit) {
+internal fun MeerklyNavigationBar(current: Destination, onSelect: (Destination) -> Unit) {
     // Owns the navigation-bar inset — MainActivity no longer wraps the tree in
     // a Scaffold, so without this the bar floats above the gesture pill.
     NavigationBar(
@@ -199,3 +199,8 @@ private fun TabIcon(destination: Destination) = when (destination) {
     Destination.Devices -> PhoneIcon()
     Destination.Settings -> SlidersIcon()
 }
+
+/** Render-harness entry point: the bar on its own, nothing else wired up. */
+@Composable
+internal fun MeerklyNavigationBarPreview() =
+    MeerklyNavigationBar(Destination.Home) {}

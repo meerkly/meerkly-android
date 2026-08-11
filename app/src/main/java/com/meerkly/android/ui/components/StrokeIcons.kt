@@ -2,6 +2,7 @@ package com.meerkly.android.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -11,17 +12,27 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.meerkly.android.ui.theme.Cream
 
 @Composable
-internal fun StrokeIcon(builder: Path.() -> Unit) {
-    Canvas(modifier = Modifier.size(22.dp)) {
+internal fun StrokeIcon(
+    // Follows the ambient content colour rather than being hardcoded. These
+    // icons started life inside IconChip, where white-on-gradient was always
+    // right; reusing them in the navigation bar drew white on a cream surface,
+    // so every unselected tab icon was invisible and only the selected one —
+    // sitting on the pink indicator — showed up.
+    color: Color = LocalContentColor.current,
+    size: Dp = 22.dp,
+    builder: Path.() -> Unit,
+) {
+    Canvas(modifier = Modifier.size(size)) {
         // Paths are authored in a 24x24 box.
-        scale(size.width / 24f, pivot = Offset.Zero) {
+        scale(this.size.width / 24f, pivot = Offset.Zero) {
             drawPath(
                 Path().apply(builder),
-                Color.White,
+                color,
                 style = Stroke(2.2f, cap = StrokeCap.Round, join = StrokeJoin.Round),
             )
         }

@@ -34,6 +34,7 @@ import com.meerkly.android.BuildConfig
 import com.meerkly.android.R
 import com.meerkly.android.browser.GeckoViewHost
 import com.meerkly.android.model.AuthStatus
+import com.meerkly.android.ui.nav.Destination
 import com.meerkly.android.ui.nav.rememberNavState
 import com.meerkly.android.ui.theme.Bone
 import com.meerkly.android.ui.theme.Ink
@@ -55,13 +56,17 @@ import java.io.File
  * node (and its session binding) identical across the toggle.
  */
 @Composable
-fun RootScreen(viewModel: MainViewModel, onShareDiagnostics: (File) -> Unit) {
+fun RootScreen(
+    viewModel: MainViewModel,
+    onShareDiagnostics: (File) -> Unit,
+    startDestination: Destination = Destination.Home,
+) {
     val auth by viewModel.authStatus.collectAsState()
     val browserVisible by viewModel.browserVisible.collectAsState()
     // rememberSaveable, not remember: the debug screen used to vanish on
     // rotation.
     var showDebugTools by rememberSaveable { mutableStateOf(false) }
-    val nav = rememberNavState()
+    val nav = rememberNavState(startDestination)
 
     // The debug tools screen brings its own full-size host, so the panel must
     // never be open at the same time.
