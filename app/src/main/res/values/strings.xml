@@ -81,4 +81,63 @@
     <string name="browser_hide">Hide browser</string>
     <string name="browser_panel_title">Browser</string>
     <string name="browser_panel_idle">Nothing loaded yet</string>
+
+    <!-- Navigation tabs -->
+    <string name="nav_home">Home</string>
+    <string name="nav_activity">Activity</string>
+    <string name="nav_devices">Devices</string>
+    <string name="nav_settings">Settings</string>
+    <!-- Relative timestamps (buckets come from util/RelativeTime) -->
+    <string name="time_just_now">just now</string>
+    <string name="time_minutes">%1$d min ago</string>
+    <string name="time_hours">%1$d h ago</string>
+    <string name="time_yesterday">yesterday</string>
+    <string name="time_days">%1$d days ago</string>
+    <string name="time_never">hasn\'t connected yet</string>
+
+    <!-- Activity feed -->
+    <string name="activity_since_start">Since the app started</string>
+    <string name="activity_stat_pages">Pages handled</string>
+    <string name="activity_stat_ok">Succeeded</string>
+    <string name="activity_stat_speed">Typical speed</string>
+    <string name="activity_empty_title">Nothing yet</string>
+    <string name="activity_empty_note">When Meerkly fetches a page for the network, it\'ll show up here.</string>
+    <string name="activity_empty_stopped_note">Meerkly is stopped, so it isn\'t fetching anything. Start it in Settings.</string>
+    <string name="activity_select_title">Pick a page</string>
+    <string name="activity_select_hint">Choose anything on the left to see the details.</string>
+    <string name="activity_detail_requested">Requested</string>
+    <string name="activity_detail_final">Ended up at</string>
+    <string name="activity_detail_duration">Took</string>
+    <string name="activity_detail_size">Page size</string>
+    <string name="activity_detail_started">When</string>
+    <string name="activity_detail_error">What went wrong</string>
+    <string name="activity_ok">Fetched</string>
+    <string name="activity_failed">Failed</string>
+
+    <!-- Devices (placeholder until the account API describes a device) -->
+    <string name="devices_soon_title">Your devices, soon</string>
+    <string name="devices_soon_note">This is where every device you\'ve linked will show up, with what each one has earned.</string>
+
+    <!-- Settings -->
+    <string name="settings_section_worker">Worker</string>
+    <string name="settings_section_permissions">Permissions</string>
+    <string name="settings_section_help">Help</string>
+    <string name="settings_section_about">About this device</string>
+    <string name="settings_watch_title">Watch Meerkly work</string>
+    <string name="settings_watch_note">Opens the browser Meerkly uses, so you can see exactly what it\'s loading.</string>
+    <string name="settings_notifications_on">On — you\'ll see what Meerkly is doing.</string>
+    <string name="settings_notifications_off">Off. Without it you can\'t see Meerkly running or stop it from the shade.</string>
+    <string name="settings_notifications_title">Notifications</string>
+    <string name="settings_battery_title">Run in the background</string>
+    <string name="settings_battery_on">Allowed — Meerkly can keep earning while your phone is idle.</string>
+    <string name="settings_battery_off">Restricted. Android will pause Meerkly when your phone is idle.</string>
+    <string name="settings_diagnostics_title">Share diagnostics</string>
+    <string name="settings_diagnostics_note">A file you can send us if something looks wrong. No page content, no personal browsing.</string>
+    <string name="settings_diagnostics_action">Share</string>
+    <string name="settings_diagnostics_busy">Preparing…</string>
+    <string name="settings_device_id">Device ID</string>
+    <string name="settings_app_version">App version</string>
+    <string name="settings_engine">Browser engine</string>
+    <string name="settings_model">Phone</string>
+    <string name="settings_sign_out_note">Meerkly keeps running and earning on this device after you sign out.</string>
 </resources>

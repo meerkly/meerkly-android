@@ -5,11 +5,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.Box
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meerkly.android.diagnostics.DiagnosticsExporter
 import com.meerkly.android.ui.MainViewModel
@@ -32,17 +27,17 @@ class MainActivity : ComponentActivity() {
         setContent {
             MeerklyTheme {
                 val vm: MainViewModel = viewModel()
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Box(Modifier.padding(innerPadding)) {
-                        RootScreen(
-                            viewModel = vm,
-                            onShareDiagnostics = { file ->
-                                val intent = DiagnosticsExporter.shareIntent(this@MainActivity, file)
-                                startActivity(Intent.createChooser(intent, "Share diagnostics"))
-                            },
-                        )
-                    }
-                }
+                // No Scaffold: it would inset the whole tree uniformly, leaving a
+                // bottom navigation bar floating above the gesture pill with bare
+                // background behind it. Each chrome surface applies its own
+                // insets instead (top bar = status bar, nav bar = navigation bar).
+                RootScreen(
+                    viewModel = vm,
+                    onShareDiagnostics = { file ->
+                        val intent = DiagnosticsExporter.shareIntent(this@MainActivity, file)
+                        startActivity(Intent.createChooser(intent, "Share diagnostics"))
+                    },
+                )
             }
         }
     }

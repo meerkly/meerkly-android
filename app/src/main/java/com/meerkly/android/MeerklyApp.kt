@@ -62,7 +62,7 @@ class AppGraph(app: Application) {
     val machineId: String = MachineIdManager.getMachineId(app)
     private val logDir = File(app.filesDir, "logs")
     val logger: AppLogger = JsonlFileLogger(logDir, machineId)
-    val recentRepo = RecentNavigationRepository()
+    val recentRepo = RecentNavigationRepository(maxEntries = 50)
     val geckoVersion: String? = runCatching { org.mozilla.geckoview.BuildConfig.MOZILLA_VERSION }.getOrNull()
     val browserManager = GeckoBrowserManager(app, logger)
     val diagnostics = DiagnosticsExporter(app, logger, recentRepo, machineId, geckoVersion)
@@ -88,6 +88,7 @@ class AppGraph(app: Application) {
     val gatewayClient = GatewayClient(
         app, machineId, geckoVersion, logger, browserManager, BuildConfig.GATEWAY_URL,
         getDeviceToken = { deviceRegistration.getDeviceToken() },
+        onNavigation = { recentRepo.record(it) },
     )
     val workerPrefs = WorkerPrefs(app)
     val account = AccountCoordinator(

@@ -21,6 +21,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +34,7 @@ import com.meerkly.android.BuildConfig
 import com.meerkly.android.R
 import com.meerkly.android.browser.GeckoViewHost
 import com.meerkly.android.model.AuthStatus
+import com.meerkly.android.ui.nav.rememberNavState
 import com.meerkly.android.ui.theme.Bone
 import com.meerkly.android.ui.theme.Ink
 import com.meerkly.android.ui.theme.InkSoft
@@ -56,13 +58,21 @@ import java.io.File
 fun RootScreen(viewModel: MainViewModel, onShareDiagnostics: (File) -> Unit) {
     val auth by viewModel.authStatus.collectAsState()
     val browserVisible by viewModel.browserVisible.collectAsState()
-    var showDebugTools by remember { mutableStateOf(false) }
+    // rememberSaveable, not remember: the debug screen used to vanish on
+    // rotation.
+    var showDebugTools by rememberSaveable { mutableStateOf(false) }
+    val nav = rememberNavState()
 
     // The debug tools screen brings its own full-size host, so the panel must
     // never be open at the same time.
     val panelOpen = browserVisible && !showDebugTools
 
-    BackHandler(enabled = panelOpen) { viewModel.hideBrowser() }
+    // Priorities 1 and 2 of the back chain. MainScaffold owns 3 (detail) and 4
+    // (non-Home tab) behind a mutually exclusive `enabled`, so neither handler
+    // depends on dispatcher registration order.
+    BackHandler(enabled = panelOpen || showDebugTools) {
+        if (panelOpen) viewModel.hideBrowser() else showDebugTools = false
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(Bone)) {
         if (showDebugTools) {
@@ -77,12 +87,14 @@ fun RootScreen(viewModel: MainViewModel, onShareDiagnostics: (File) -> Unit) {
                     CircularProgressIndicator(color = Pink)
                 }
                 AuthStatus.SignedOut -> AuthGateScreen(viewModel)
-                is AuthStatus.SignedIn -> DashboardScreen(
+                is AuthStatus.SignedIn -> MainScaffold(
                     viewModel = viewModel,
                     auth = status,
-                    onToggleBrowser = viewModel::toggleBrowserVisible,
-                    browserVisible = browserVisible,
-                    onFooterLongPress = { if (BuildConfig.DEBUG) showDebugTools = true },
+                    nav = nav,
+                    // The panel's handler outranks the scaffold's.
+                    backEnabled = !panelOpen,
+                    onShareDiagnostics = onShareDiagnostics,
+                    onDebugTools = { if (BuildConfig.DEBUG) showDebugTools = true },
                 )
             }
 

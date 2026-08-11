@@ -5,6 +5,7 @@ import android.os.PowerManager
 import com.meerkly.android.browser.GeckoBrowserManager
 import com.meerkly.android.data.DeviceInfo
 import com.meerkly.android.logging.AppLogger
+import com.meerkly.android.model.NavigationResult
 import com.meerkly.android.util.MiniJson
 import com.meerkly.android.util.UrlValidator
 import kotlinx.coroutines.CoroutineScope
@@ -44,6 +45,13 @@ class GatewayClient(
     private val browserManager: GeckoBrowserManager,
     private val url: String,
     private val getDeviceToken: () -> String? = { null },
+    /**
+     * Every finished crawl, success or failure, for the Activity feed. Defaulted
+     * to a no-op so tests can construct the client without a repository — and
+     * because for a long time nothing recorded these at all: the feed's ring was
+     * only ever written by the debug URL tester, so gateway work was invisible.
+     */
+    private val onNavigation: (NavigationResult) -> Unit = {},
 ) {
     private val client = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
@@ -245,6 +253,14 @@ class GatewayClient(
                         }
                     },
                     onFailure = { e ->
+                        val now = java.time.Instant.now()
+                        onNavigation(
+                            NavigationResult(
+                                success = false, requestedUrl = url, finalUrl = null, title = null,
+                                error = e.message ?: "Invalid URL", startedAt = now, finishedAt = now,
+                                loadedMs = null, htmlSizeBytes = null,
+                            ),
+                        )
                         sendResult(ws, jobId, false, null, null, null, e.message ?: "Invalid URL", null, false, -1, 0)
                     },
                 )

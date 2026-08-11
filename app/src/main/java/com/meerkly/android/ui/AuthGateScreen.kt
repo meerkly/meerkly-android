@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meerkly.android.R
+import com.meerkly.android.ui.theme.Display
 import com.meerkly.android.ui.theme.Bone
 import com.meerkly.android.ui.theme.Cream
 import com.meerkly.android.ui.theme.InkSoft
@@ -54,6 +56,10 @@ fun AuthGateScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxSize()
             .background(Bone)
+            // Owns its insets: MainActivity no longer wraps the tree in a
+            // Scaffold. safeDrawing (not just statusBars) because this card is
+            // centred and scrollable — it must clear the gesture pill too.
+            .safeDrawingPadding()
             .verticalScroll(rememberScrollState()),
         contentAlignment = Alignment.Center,
     ) {
@@ -74,14 +80,14 @@ fun AuthGateScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                 MeerklyMascot(modifier = Modifier.size(width = 140.dp, height = 168.dp))
                 Text(
                     text = "meerkly",
-                    fontFamily = FontFamily.Serif,
+                    fontFamily = Display,
                     fontWeight = FontWeight.Bold,
                     fontSize = 22.sp,
                 )
                 Text(
                     text = stringResource(R.string.gate_title),
                     style = MaterialTheme.typography.headlineSmall,
-                    fontFamily = FontFamily.Serif,
+                    fontFamily = Display,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                 )

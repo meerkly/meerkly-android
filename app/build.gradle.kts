@@ -155,6 +155,12 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.arch.core.testing)
     testImplementation(libs.okhttp.mockwebserver)
+    // Compose under Robolectric: renders on the JVM (no device), which is how
+    // the adaptive branches get asserted at specific widths via
+    // @Config(qualifiers = "w840dp-...") and how design renders are captured.
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.androidx.compose.ui.test.manifest)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)

@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meerkly.android.R
+import com.meerkly.android.ui.theme.Display
 import com.meerkly.android.ui.theme.Cream
 import com.meerkly.android.ui.theme.Emerald
 import com.meerkly.android.ui.theme.EmeraldDeep
@@ -66,7 +67,7 @@ fun GettingStartedCard(
                 Text(
                     stringResource(R.string.setup_title),
                     style = MaterialTheme.typography.titleSmall,
-                    fontFamily = FontFamily.Serif,
+                    fontFamily = Display,
                     fontWeight = FontWeight.Bold,
                     color = Ink,
                 )

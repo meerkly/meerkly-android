@@ -134,6 +134,33 @@ every auto-start path checks it; nothing may restart the worker until the user p
 Sign-out remains orthogonal (never stops the worker; desktop-mirrored). A user force-stop from
 system settings blocks restart until the next app open — accepted OS behavior.
 
+### Play release: the foreground-service declaration catch-22
+
+**A build that adds a new foreground service is blocked on upload by default**, and the declaration
+form only appears *after* the block. The required order is: upload → let it get flagged → complete
+the declaration on the App content page → resubmit. This is the normal path, not a mistake. Just Eat
+Takeaway [documented the same
+surprise](https://medium.com/justeattakeaway-tech/live-updates-and-progress-notifications-for-android-16-at-jet-b0c87eab17b4)
+("results in a bit of a catch-22… this initially disrupted the release cadence").
+
+Two declarations are needed:
+- **`specialUse` FGS** — use-case description plus a demo video.
+- **`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`** — the riskier of the two. Apps with *bounded*,
+  user-initiated work (a food order finishing in under an hour) don't need it; Meerkly's worker runs
+  indefinitely, so the justification has to actually carry the argument that Doze suspending the
+  socket breaks the app's core function.
+
+### Live Updates (Android 16) — considered and rejected
+
+Don't re-litigate: a Live Update (`ProgressStyle` + `POST_PROMOTED_NOTIFICATIONS` +
+`setRequestPromotedOngoing`, the food-delivery-style status-bar chip) is a **notification
+presentation** API and grants no background execution whatsoever — apps that use it still run a
+foreground service underneath, and Just Eat's is `specialUse`, exactly like ours. It also fails
+Google's own [usage criteria](https://developer.android.com/develop/ui/views/notifications/live-update)
+for this app: a Live Update must be time-sensitive, "require the user's attention throughout", and
+have "a distinct start and end". Meerkly's worker runs indefinitely and is explicitly designed to
+need no attention.
+
 ## Gateway worker (live, gated on device pairing)
 
 `gateway/GatewayClient.kt` (OkHttp) holds a persistent WebSocket to `api-gateway`, registers with
