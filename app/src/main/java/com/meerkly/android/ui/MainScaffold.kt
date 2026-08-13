@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -155,7 +156,7 @@ internal fun MeerklyNavigationBar(current: Destination, onSelect: (Destination) 
 }
 
 @Composable
-private fun MeerklyNavigationRail(current: Destination, onSelect: (Destination) -> Unit) {
+internal fun MeerklyNavigationRail(current: Destination, onSelect: (Destination) -> Unit) {
     NavigationRail(
         containerColor = Cream,
         // safeDrawing on the rail: it hugs the start edge, which is where the
@@ -163,7 +164,10 @@ private fun MeerklyNavigationRail(current: Destination, onSelect: (Destination) 
         modifier = Modifier.safeDrawingPadding(),
     ) {
         Column(
-            modifier = Modifier.fillMaxSize(),
+            // fillMaxHeight, never fillMaxSize: NavigationRail's container is
+            // widthIn(min = 80.dp), so filling width would expand the rail to
+            // the whole row and starve the weighted content pane to zero.
+            modifier = Modifier.fillMaxHeight(),
             verticalArrangement = Arrangement.Center,
         ) {
             Destination.entries.forEach { destination ->

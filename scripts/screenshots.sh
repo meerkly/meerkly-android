@@ -39,12 +39,25 @@ fi
 }
 "$ADB" get-state >/dev/null 2>&1 || { echo "error: no device attached (adb devices)." >&2; exit 1; }
 
+# The captures are of whatever is on screen — a locked device silently produces
+# twelve identical lock-screen shots. Wake it, keep it awake for the run
+# (restored in the exit trap), and refuse to start behind a keyguard: a secure
+# lockscreen can't be dismissed over adb, so the user has to unlock by hand.
+"$ADB" shell input keyevent KEYCODE_WAKEUP >/dev/null
+"$ADB" shell svc power stayon true >/dev/null
+sleep 1
+if "$ADB" shell dumpsys window 2>/dev/null | grep -q "isKeyguardShowing=true"; then
+  echo "error: device is locked. Unlock it, then re-run." >&2
+  exit 1
+fi
+
 PKG=com.meerkly.android
 OUT_ROOT=store-assets/screenshots
 
 # --- restore, always ---------------------------------------------------------
 restore() {
   echo "→ restoring device"
+  "$ADB" shell svc power stayon false >/dev/null 2>&1 || true
   "$ADB" shell wm size reset >/dev/null 2>&1 || true
   "$ADB" shell wm density reset >/dev/null 2>&1 || true
   "$ADB" shell settings put system accelerometer_rotation 1 >/dev/null 2>&1 || true
@@ -69,9 +82,17 @@ shoot() {              # shoot <slot> <nn> <name> <destination-key|->
   local dir="$OUT_ROOT/$slot"
   mkdir -p "$dir"
   if [ "$screen" != "-" ]; then
-    # Debug-only intent extra, so we never tap fixed coordinates that would
-    # move at every size. See MainActivity.
-    "$ADB" shell am start -n "$PKG/.MainActivity" -e meerkly.screen "$screen" >/dev/null
+    # Debug-only intent extras, so we never tap fixed coordinates that would
+    # move at every size. See MainActivity. Two subtleties:
+    #  - force-stop first: `am start` on an already-running task just brings it
+    #    to the front and DROPS the intent (standard launchMode), so the screen
+    #    extra only takes effect on a cold start.
+    #  - meerkly.demo seeds placeholder crawls: the activity ring is in-memory
+    #    and starts empty on every cold start, so without it the Activity tab
+    #    would always shoot as the empty state.
+    "$ADB" shell am force-stop "$PKG" >/dev/null
+    "$ADB" shell am start -n "$PKG/.MainActivity" \
+        -e meerkly.screen "$screen" -e meerkly.demo 1 >/dev/null
   fi
   sleep 2.5
   "$ADB" exec-out screencap -p > "$dir/$nn-$name.png"
@@ -121,13 +142,16 @@ fail=0
 for f in $(find "$OUT_ROOT" -name '*.png' 2>/dev/null); do
   read -r w h < <(magick identify -format "%w %h" "$f" 2>/dev/null || echo "0 0")
   bytes=$(wc -c <"$f")
+  # Plain `if`s, not `[ … ] && …` chains: under set -e a false test as the
+  # last command of an AND-OR list kills the script, so a healthy shot would
+  # abort validation entirely.
   problem=""
-  [ "$w" -lt 320 ] || [ "$h" -lt 320 ] && problem="too small"
-  [ "$w" -gt 3840 ] || [ "$h" -gt 3840 ] && problem="too large"
-  [ "$bytes" -gt 8388608 ] && problem="over 8MB"
+  if [ "$w" -lt 320 ] || [ "$h" -lt 320 ]; then problem="too small"; fi
+  if [ "$w" -gt 3840 ] || [ "$h" -gt 3840 ]; then problem="too large"; fi
+  if [ "$bytes" -gt 8388608 ]; then problem="over 8MB"; fi
   printf "  %5s x %-5s %6sKB  %s%s\n" "$w" "$h" "$((bytes / 1024))" "$f" \
     "${problem:+  <-- $problem}"
-  [ -n "$problem" ] && fail=1
+  if [ -n "$problem" ]; then fail=1; fi
 done
 [ "$fail" -eq 0 ] || { echo "error: some shots fail Play's limits" >&2; exit 1; }
 
