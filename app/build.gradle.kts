@@ -52,13 +52,31 @@ android {
         // The value is inert: nothing reads it.
         manifestPlaceholders["appAuthRedirectScheme"] = "unused"
 
-        // Empty means "the production gateway", which is what the SDK resolves an
-        // empty gatewayAddresses list to. A debug build overrides it with a dev
-        // address. This is no longer a WebSocket URL — the SDK takes host:port.
+        // Every build — debug and release alike — talks to the public Meerkly
+        // services. There is no local-dev configuration, so there is one value
+        // per field here and no per-build-type override to keep in sync or get
+        // wrong.
+        //
+        // Empty means "the production gateway", which is what the SDK resolves
+        // an empty gatewayAddresses list to. This is not a WebSocket URL — the
+        // SDK takes host:port.
         buildConfigField("String", "GATEWAY_URL", "\"\"")
         // Account portal (OAuth provider + the /api/v1/me publisher-id lookup).
-        // Same default/override pattern as GATEWAY_URL.
-        buildConfigField("String", "ACCOUNT_BASE_URL", "\"\"")
+        buildConfigField("String", "ACCOUNT_BASE_URL", "\"https://dashboard.meerkly.com\"")
+        // Must byte-match both the redirect_uri the dashboard seeds (derived
+        // from its own APP_HOST) and the verified App Link intent filter in
+        // AndroidManifest.xml. Do not change this without updating both in
+        // lockstep.
+        //
+        // A debug build is signed with the debug keystore, whose certificate is
+        // not in the server's assetlinks.json, so Android cannot verify this as
+        // an App Link for a debug build — on Android 12+ the redirect opens the
+        // browser instead of returning to the app, and sign-in will not
+        // complete. Fixing that means registering the debug certificate's
+        // SHA-256 in the server's ANDROID_CERT_FINGERPRINTS; it is a
+        // server-side, product-owner call, not something to work around here
+        // (no fallback intent filter, no custom scheme, no relaxing autoVerify).
+        buildConfigField("String", "OAUTH_REDIRECT_URI", "\"https://dashboard.meerkly.com/oauth2redirect\"")
         // Read from the version catalog rather than duplicated as a literal, so
         // the Settings/diagnostics display can't drift from the dependency
         // actually on the classpath (libs.versions.toml is the source of
@@ -80,34 +98,7 @@ android {
     }
 
     buildTypes {
-        debug {
-            // A dev gateway on the host's LAN IP, reachable from a physical
-            // device on the same Wi-Fi and from the emulator. host:port, not a
-            // ws:// URL — the SDK speaks QUIC, not WebSocket.
-            buildConfigField("String", "GATEWAY_URL", "\"192.168.1.10:8443\"")
-            // Rails dev server on the same host (cleartext allowed for this IP by
-            // the debug network_security_config; Rails allows IP-literal hosts).
-            buildConfigField("String", "ACCOUNT_BASE_URL", "\"http://192.168.1.10:3000\"")
-            // Must byte-match both the dev Doorkeeper's seeded redirect_uri
-            // (derived from that server's own APP_HOST) and the plain intent
-            // filter debug/AndroidManifest.xml registers for it. A
-            // debug-keystore build can never have verified an https App Link,
-            // so this stays the dev server's plain http URL — not the
-            // release value below.
-            buildConfigField("String", "OAUTH_REDIRECT_URI", "\"http://192.168.1.10:3000/oauth2redirect\"")
-        }
         release {
-            // Empty on purpose: the SDK's own default is the production gateway,
-            // and duplicating the address here would be a second place to get it
-            // wrong.
-            buildConfigField("String", "GATEWAY_URL", "\"\"")
-            buildConfigField("String", "ACCOUNT_BASE_URL", "\"https://dashboard.meerkly.com\"")
-            // Must byte-match both the redirect_uri the dashboard seeds
-            // (derived from its own APP_HOST) and the verified App Link intent
-            // filter in the release manifest. Do not change this without
-            // updating both of those in lockstep.
-            buildConfigField("String", "OAUTH_REDIRECT_URI", "\"https://dashboard.meerkly.com/oauth2redirect\"")
-
             // R8 stays off. The SDK's public surface is uniffi-generated bindings
             // dispatching through JNA reflection, and the size win on an app this
             // small does not justify that risk.

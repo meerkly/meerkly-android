@@ -130,9 +130,14 @@ Mirrors the desktop's OAuth flow; device registration is gone, replaced by a pub
   `BuildConfig.ACCOUNT_BASE_URL` (Doorkeeper; static endpoints, no discovery). Client id
   `meerkly-android`, redirect `https://dashboard.meerkly.com/oauth2redirect` — a verified **App
   Link** (`android:autoVerify="true"` in `AndroidManifest.xml`), not a private-use scheme: any app
-  can claim a scheme, and this client skips the consent screen (RFC 8252 §8.1). **Debug builds
-  inject a cleartext-permitting `ConnectionBuilder`** (AppAuth's default refuses the `http://` dev
-  token endpoint) and redirect to a LAN IP instead (`app/src/debug/AndroidManifest.xml`).
+  can claim a scheme, and this client skips the consent screen (RFC 8252 §8.1). There is no
+  local-dev configuration: debug and release builds both use the public gateway, account portal
+  and redirect URI (`GATEWAY_URL`, `ACCOUNT_BASE_URL`, `OAUTH_REDIRECT_URI` in
+  `app/build.gradle.kts`), and AppAuth's default HTTPS-only `ConnectionBuilder` is used
+  unconditionally. One consequence: a debug build is signed with the debug keystore, whose
+  certificate isn't in the server's `assetlinks.json`, so Android can't verify the App Link for a
+  debug build — sign-in won't return to the app until that certificate's SHA-256 is added to the
+  server's `ANDROID_CERT_FINGERPRINTS`.
 - Sign-in completes with a `GET /api/v1/me` call that returns the account's email and **publisher
   id** — the SDK's required config, and the only thing standing between a signed-in install and
   earning. `AuthManager.completeSignIn` persists both; `AccountCoordinator` starts the proxy once

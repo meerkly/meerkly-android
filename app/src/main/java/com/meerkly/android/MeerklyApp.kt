@@ -67,9 +67,6 @@ class AppGraph(app: Application) {
         accountBaseUrl = BuildConfig.ACCOUNT_BASE_URL,
         logger = logger,
         store = secureStore,
-        // Debug builds talk to the Rails dev server over cleartext; AppAuth's
-        // default connection builder would reject the http token endpoint.
-        allowInsecureHttp = BuildConfig.DEBUG,
     )
 
     /** The account we earn for, or null until sign-in has produced one. */
@@ -84,7 +81,7 @@ class AppGraph(app: Application) {
         // Read on every start, not captured: sign-in may not have happened yet
         // when this graph is built.
         publisherId = { publisherId },
-        // Empty means the production gateway. A debug build points at a dev one.
+        // Empty means the production gateway — the only gateway any build points at.
         gatewayAddresses = BuildConfig.GATEWAY_URL.takeIf { it.isNotBlank() }?.let { listOf(it) }.orEmpty(),
     )
     val workerPrefs = WorkerPrefs(app)

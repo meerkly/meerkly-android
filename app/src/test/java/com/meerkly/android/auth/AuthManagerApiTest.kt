@@ -177,8 +177,8 @@ class AuthManagerApiTest {
         assertEquals(
             false,
             AuthManager.sessionHostMatches(
-                "http://192.168.1.10:3000",
-                "http://192.168.1.10:8443/oauth/token",
+                "https://dashboard.meerkly.com:3000",
+                "https://dashboard.meerkly.com:8443/oauth/token",
             ),
         )
     }

@@ -19,14 +19,11 @@ import net.openid.appauth.AuthorizationResponse
 import net.openid.appauth.AuthorizationService
 import net.openid.appauth.AuthorizationServiceConfiguration
 import net.openid.appauth.ResponseTypeValues
-import net.openid.appauth.connectivity.ConnectionBuilder
 import net.openid.appauth.connectivity.DefaultConnectionBuilder
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 
@@ -49,7 +46,6 @@ class AuthManager(
     accountBaseUrl: String,
     private val logger: AppLogger,
     private val store: SecureStore,
-    private val allowInsecureHttp: Boolean = false,
     private val http: OkHttpClient = OkHttpClient.Builder()
         .callTimeout(15, TimeUnit.SECONDS)
         .build(),
@@ -62,12 +58,12 @@ class AuthManager(
         Uri.parse("$baseUrl/oauth/token"),
     )
 
-    // AppAuth's DefaultConnectionBuilder refuses non-HTTPS endpoints; dev builds
-    // talk to the Rails server over cleartext, so they get a permissive builder.
+    // Every build talks to the public, HTTPS account portal, so this is the
+    // stock connection builder unconditionally — no insecure-HTTP escape hatch.
     private val authService = AuthorizationService(
         appContext,
         AppAuthConfiguration.Builder()
-            .setConnectionBuilder(if (allowInsecureHttp) InsecureConnectionBuilder else DefaultConnectionBuilder.INSTANCE)
+            .setConnectionBuilder(DefaultConnectionBuilder.INSTANCE)
             .build(),
     )
 
@@ -311,30 +307,17 @@ class AuthManager(
         }.onFailure { logger.warn("auth.earnings_failed", mapOf("error" to it.message)) }.getOrNull()
     }
 
-    /** Dev-only: permits the cleartext Rails endpoints of debug builds. */
-    private object InsecureConnectionBuilder : ConnectionBuilder {
-        override fun openConnection(uri: Uri): HttpURLConnection {
-            val conn = URL(uri.toString()).openConnection() as HttpURLConnection
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 10_000
-            conn.instanceFollowRedirects = false
-            return conn
-        }
-    }
-
     companion object {
         const val CLIENT_ID = "meerkly-android"
 
-        // The redirect URI is BuildConfig.OAUTH_REDIRECT_URI (set per build
-        // type in app/build.gradle.kts), not a constant here, because it must
-        // byte-match two things that are themselves build-type specific: the
-        // server's seeded redirect_uri (derived from that server's own
-        // APP_HOST) and the intent filter for that build type in
-        // AndroidManifest.xml — release's verified https App Link, debug's
-        // plain filter for the dev server. It is an App Link rather than a
-        // private-use scheme because any app on the device can claim a
-        // scheme, and this client skips the consent screen — see RFC 8252
-        // §8.1.
+        // The redirect URI is BuildConfig.OAUTH_REDIRECT_URI (declared once in
+        // app/build.gradle.kts — every build uses the same public endpoint),
+        // not a constant here, because it must byte-match two things: the
+        // dashboard's seeded redirect_uri (derived from its own APP_HOST) and
+        // the verified https App Link intent filter in AndroidManifest.xml.
+        // It is an App Link rather than a private-use scheme because any app
+        // on the device can claim a scheme, and this client skips the consent
+        // screen — see RFC 8252 §8.1.
 
         /** The API's one refusal a user can actually act on. */
         const val ERROR_EMAIL_UNVERIFIED = "email_verification_required"
