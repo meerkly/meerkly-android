@@ -113,4 +113,25 @@ class NavStateTest {
         // reopening on 2.0 hands us a key that no longer exists.
         assertNull(Destination.fromKey("activity"))
     }
+
+    @Test
+    fun `restore from a list of unexpected length falls back to Home instead of crashing`() {
+        // The saved list is untrusted input: a shorter list must not throw
+        // IndexOutOfBoundsException, and a longer one (e.g. a stale 3-element
+        // pre-2.0 layout) must not misread its extra field as deviceKey.
+        val tooShort = NavState.Saver.restore(emptyList<Any?>())!!
+        assertEquals(Destination.Home, tooShort.destination)
+        assertNull(tooShort.deviceKey)
+
+        val tooLong = NavState.Saver.restore(listOf("devices", "m-1", "old-activity-key"))!!
+        assertEquals(Destination.Devices, tooLong.destination)
+        assertNull(tooLong.deviceKey)
+    }
+
+    @Test
+    fun `restore with an unknown destination key falls back to Home with no selection`() {
+        val restored = NavState.Saver.restore(listOf("nope", "m-1"))!!
+        assertEquals(Destination.Home, restored.destination)
+        assertNull(restored.deviceKey)
+    }
 }
