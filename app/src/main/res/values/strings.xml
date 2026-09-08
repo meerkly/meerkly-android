@@ -31,7 +31,7 @@
     <string name="credits_unavailable_title">Can\'t load your credits</string>
     <string name="credits_unavailable_note">Your credits are stored on your Meerkly account and are safe — the app just can\'t reach the server right now. They\'ll reappear once it reconnects.</string>
     <string name="dash_sign_out">Sign out</string>
-    <string name="device_linked">✓ Device linked</string>
+    <string name="ready_to_earn">✓ Ready to earn</string>
     <string name="earn_device_label">Earned on this device</string>
     <string name="earn_device_note">Since you set up Meerkly here</string>
     <string name="earn_total_label">Total earned</string>

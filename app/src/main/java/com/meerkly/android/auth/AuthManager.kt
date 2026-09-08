@@ -37,8 +37,11 @@ class EmailUnverifiedException : Exception()
  * Code + PKCE, public client) via AppAuth — the Android counterpart of the
  * desktop's OAuthManager. Owned by the process-singleton AppGraph so token
  * refresh works with no Activity alive; AuthState is persisted encrypted via
- * [SecureStore]. Login exists only to verify device ownership: sign-out
- * revokes/clears the OAuth session but never touches the device registration.
+ * [SecureStore]. Sign-out revokes/clears the OAuth session; the caller
+ * ([com.meerkly.android.AccountCoordinator]) also stops the proxy, because in
+ * 2.0 the publisher id fetched here is both the proxy's credential payload
+ * and the earning identity — there is no separate device registration left
+ * running once the account is signed out.
  */
 class AuthManager(
     appContext: Context,
@@ -146,7 +149,7 @@ class AuthManager(
             fetchAccount(token.accessToken ?: "")
         } catch (e: EmailUnverifiedException) {
             authState = AuthState()
-            return "Confirm your email address to finish setting up Meerkly."
+            return MESSAGE_EMAIL_UNVERIFIED
         }
         if (account == null) {
             // No userinfo means the sign-in did not complete.
@@ -186,8 +189,9 @@ class AuthManager(
 
     /**
      * Sign out: best-effort server-side revocation, then clear the OAuth
-     * session. The device registration/token and the running worker are
-     * intentionally untouched — login only verifies ownership.
+     * session. The publisher id is the proxy's credential in 2.0, so the
+     * caller stops the running worker itself once this returns — nothing
+     * here is left registered for the account to keep earning against.
      */
     suspend fun signOut() {
         val refresh = authState.refreshToken
@@ -237,14 +241,10 @@ class AuthManager(
                         .header("Authorization", "Bearer $accessToken")
                         .build(),
                 ).execute().use { res ->
-                    if (res.code == 403) {
-                        val err = runCatching {
-                            JSONObject(res.body?.string() ?: "").optString("error")
-                        }.getOrNull()
-                        if (err == ERROR_EMAIL_UNVERIFIED) throw EmailUnverifiedException()
-                    }
+                    val bodyString = res.body?.string()
+                    if (isEmailUnverified(res.code, bodyString)) throw EmailUnverifiedException()
                     if (!res.isSuccessful) return@use null
-                    val json = JSONObject(res.body?.string() ?: "")
+                    val json = JSONObject(bodyString ?: "")
                     val mail = parseEmail(json) ?: return@use null
                     mail to parsePublisherId(json)
                 }
@@ -313,12 +313,33 @@ class AuthManager(
         /** The API's one refusal a user can actually act on. */
         const val ERROR_EMAIL_UNVERIFIED = "email_verification_required"
 
+        /**
+         * The user-facing message for [ERROR_EMAIL_UNVERIFIED] — actionable,
+         * as opposed to the generic "Sign-in failed" text used everywhere
+         * else completeSignIn gives up. Pulled into a constant so tests can
+         * assert against the real value rather than a copy of the literal.
+         */
+        const val MESSAGE_EMAIL_UNVERIFIED = "Confirm your email address to finish setting up Meerkly."
+
         private const val KEY_AUTH_STATE = "auth_state"
         private const val KEY_EMAIL = "account_email"
         private const val KEY_PUBLISHER_ID = "publisher_id"
 
         // Parsing is in the companion so it can be tested without an Android
         // Context, an AuthorizationService or a live socket.
+
+        /**
+         * Does this response mean "the account's email is unproven", rather than
+         * an ordinary failure?
+         *
+         * Pulled out as a pure function because it is the one branch in the
+         * fetch path with a user-visible consequence — the difference between
+         * telling someone to confirm their address and silently failing a
+         * sign-in they will keep retrying.
+         */
+        fun isEmailUnverified(code: Int, body: String?): Boolean =
+            code == 403 &&
+                runCatching { JSONObject(body ?: "").optString("error") }.getOrNull() == ERROR_EMAIL_UNVERIFIED
 
         fun parseEmail(json: JSONObject): String? =
             json.optString("email").takeIf { it.isNotBlank() }

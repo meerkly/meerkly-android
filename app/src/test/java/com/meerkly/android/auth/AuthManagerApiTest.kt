@@ -84,6 +84,53 @@ class AuthManagerApiTest {
         assertNull(earnings.forDevice("dev_missing"))
     }
 
+    // isEmailUnverified is the one branch of the 403 handling with a
+    // user-visible consequence — it decides whether a failed sign-in gets
+    // told to confirm their email, or just told "sign-in failed" again. It
+    // is pure specifically so this distinction can be pinned down without
+    // standing up a real AuthManager (Context + SecureStore + AppAuth).
+
+    @Test
+    fun `a 403 with the email-unverified error is treated as email-unverified`() {
+        assertTrue(
+            AuthManager.isEmailUnverified(403, """{"error":"email_verification_required"}"""),
+        )
+    }
+
+    @Test
+    fun `a 403 with a different error is not treated as email-unverified`() {
+        assertEquals(false, AuthManager.isEmailUnverified(403, """{"error":"invalid_token"}"""))
+    }
+
+    @Test
+    fun `a 403 with a non-JSON body is not treated as email-unverified, and does not throw`() {
+        assertEquals(false, AuthManager.isEmailUnverified(403, "not json"))
+    }
+
+    @Test
+    fun `a 200 is never treated as email-unverified, even with the matching body`() {
+        assertEquals(
+            false,
+            AuthManager.isEmailUnverified(200, """{"error":"email_verification_required"}"""),
+        )
+    }
+
+    @Test
+    fun `a null body is not treated as email-unverified`() {
+        assertEquals(false, AuthManager.isEmailUnverified(403, null))
+    }
+
+    @Test
+    fun `the email-unverified message is the actionable one, not the generic failure text`() {
+        // completeSignIn itself needs a live AuthManager (Context, SecureStore,
+        // AppAuth's AuthorizationService) to exercise, which the brief asks us
+        // not to build just for this. This asserts against the real constant
+        // its 403 branch returns, so a regression that reused the generic
+        // failure string still fails a test.
+        assertTrue(AuthManager.MESSAGE_EMAIL_UNVERIFIED.contains("Confirm your email"))
+        assertTrue(AuthManager.MESSAGE_EMAIL_UNVERIFIED != "Sign-in failed. Please try again.")
+    }
+
     private fun fetch(path: String): String =
         okhttp3.OkHttpClient().newCall(
             okhttp3.Request.Builder().url(server.url(path)).build(),

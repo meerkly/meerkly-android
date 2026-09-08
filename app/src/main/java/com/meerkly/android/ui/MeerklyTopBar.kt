@@ -40,7 +40,7 @@ private val Gutter = 20.dp
  *
  * Sign-out used to live here; it moved to Settings, which is where people look
  * for it and which frees the bar to be purely identity — wordmark, who you're
- * signed in as, and whether this device is linked.
+ * signed in as, and whether we know which account earns.
  */
 @Composable
 fun MeerklyTopBar(auth: AuthStatus.SignedIn, width: WindowWidth) {
@@ -76,7 +76,7 @@ fun MeerklyTopBar(auth: AuthStatus.SignedIn, width: WindowWidth) {
                         Spacer(Modifier.weight(1f))
                         if (auth.publisherId != null) {
                             StatusChip(
-                                text = stringResource(R.string.device_linked),
+                                text = stringResource(R.string.ready_to_earn),
                                 fg = EmeraldDeep,
                                 bg = Emerald.copy(alpha = 0.12f),
                             )
