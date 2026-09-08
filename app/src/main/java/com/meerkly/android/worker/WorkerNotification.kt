@@ -7,11 +7,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
 import com.meerkly.android.MainActivity
 import com.meerkly.android.R
-import com.meerkly.android.gateway.WorkerConnection
+import com.meerkly.android.proxy.ProxyState
 
 /**
  * The worker's ongoing notification — the Android analogue of the desktop
@@ -22,23 +21,6 @@ object WorkerNotification {
 
     const val CHANNEL_ID = "worker"
     const val NOTIFICATION_ID = 1
-
-    /**
-     * Pure state -> text mapping, split out so a test can pin every
-     * [WorkerConnection] to honest copy (the notification must never claim
-     * more than the dashboard would).
-     */
-    @StringRes
-    fun textFor(connection: WorkerConnection): Int = when (connection) {
-        WorkerConnection.Connected -> R.string.notif_text_connected
-        WorkerConnection.Connecting, WorkerConnection.Registering -> R.string.notif_text_connecting
-        WorkerConnection.Offline -> R.string.notif_text_offline
-        WorkerConnection.Unpaired -> R.string.notif_text_unpaired
-        // Disabled/Disconnected: the launcher never starts the service for a
-        // gateway-less build, and Disconnected is a transient stop state — if
-        // either is ever visible, "connecting" is the least-wrong copy.
-        WorkerConnection.Disabled, WorkerConnection.Disconnected -> R.string.notif_text_connecting
-    }
 
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -53,7 +35,7 @@ object WorkerNotification {
         )
     }
 
-    fun build(context: Context, connection: WorkerConnection): Notification {
+    fun build(context: Context, state: ProxyState): Notification {
         val openApp = PendingIntent.getActivity(
             context,
             0,
@@ -66,10 +48,17 @@ object WorkerNotification {
             Intent(context, WorkerService::class.java).setAction(WorkerService.ACTION_STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val text = when (state) {
+            ProxyState.Connected -> context.getString(R.string.worker_notification_earning)
+            ProxyState.Connecting -> context.getString(R.string.worker_notification_connecting)
+            ProxyState.Failed -> context.getString(R.string.worker_notification_problem)
+            ProxyState.Disconnected, ProxyState.Stopped ->
+                context.getString(R.string.worker_notification_paused)
+        }
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_meerkly)
             .setContentTitle(context.getString(R.string.notif_title))
-            .setContentText(context.getString(textFor(connection)))
+            .setContentText(text)
             .setContentIntent(openApp)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

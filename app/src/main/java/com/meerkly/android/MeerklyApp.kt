@@ -7,17 +7,13 @@ import android.os.Build
 import android.os.Process
 import com.meerkly.android.auth.AccountCoordinator
 import com.meerkly.android.auth.AuthManager
-import com.meerkly.android.browser.GeckoBrowserManager
-import com.meerkly.android.data.DeviceInfo
-import com.meerkly.android.data.DeviceRegistrationManager
 import com.meerkly.android.data.KeystoreSecureStore
 import com.meerkly.android.data.MachineIdManager
-import com.meerkly.android.data.RecentNavigationRepository
 import com.meerkly.android.diagnostics.DiagnosticsExporter
-import com.meerkly.android.gateway.GatewayClient
 import com.meerkly.android.logging.AppLogger
 import com.meerkly.android.logging.JsonlFileLogger
 import com.meerkly.android.logging.LogRetention
+import com.meerkly.android.proxy.ProxyController
 import com.meerkly.android.worker.WorkerPrefs
 import com.meerkly.android.worker.WorkerServiceLauncher
 import kotlinx.coroutines.CoroutineScope
@@ -53,19 +49,14 @@ class MeerklyApp : Application() {
     }
 }
 
-/**
- * Hand-rolled dependency container built once per process. Keeping the GeckoRuntime/session,
- * logger, and repositories here (not in a ViewModel) means they survive Activity recreation and
- * rotation.
- */
 class AppGraph(app: Application) {
     val machineId: String = MachineIdManager.getMachineId(app)
     private val logDir = File(app.filesDir, "logs")
     val logger: AppLogger = JsonlFileLogger(logDir, machineId)
-    val recentRepo = RecentNavigationRepository(maxEntries = 50)
-    val geckoVersion: String? = runCatching { org.mozilla.geckoview.BuildConfig.MOZILLA_VERSION }.getOrNull()
-    val browserManager = GeckoBrowserManager(app, logger)
-    val diagnostics = DiagnosticsExporter(app, logger, recentRepo, machineId, geckoVersion)
+    val appVersion: String = runCatching {
+        app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "?"
+    }.getOrDefault("?")
+    val diagnostics = DiagnosticsExporter(app, logger, machineId, appVersion)
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val secureStore = KeystoreSecureStore(app, logger)
@@ -78,33 +69,30 @@ class AppGraph(app: Application) {
         // default connection builder would reject the http token endpoint.
         allowInsecureHttp = BuildConfig.DEBUG,
     )
-    val deviceRegistration = DeviceRegistrationManager(
-        accountBaseUrl = BuildConfig.ACCOUNT_BASE_URL,
-        machineId = machineId,
-        deviceInfo = { DeviceInfo.collect(app, geckoVersion) },
+
+    /** The account we earn for, or null until sign-in has produced one. */
+    val publisherId: String? get() = authManager.publisherId
+
+    // internal, not public: ProxyController's own visibility is internal (see
+    // ProxyController.kt), and a public property can't expose a narrower type.
+    internal val proxyController = ProxyController(
+        deviceId = machineId,
+        appVersion = appVersion,
         logger = logger,
-        store = secureStore,
-    )
-    val gatewayClient = GatewayClient(
-        app, machineId, geckoVersion, logger,
-        fetchPage = { url, waitFor, settleMs, rules, detectMs, scripts, styles ->
-            browserManager.navigateAndExtract(
-                url, waitFor, settleMs, rules, detectMs,
-                includeScripts = scripts, includeStyles = styles,
-            )
-        },
-        url = BuildConfig.GATEWAY_URL,
-        getDeviceToken = { deviceRegistration.getDeviceToken() },
-        onNavigation = { recentRepo.record(it) },
+        // Read on every start, not captured: sign-in may not have happened yet
+        // when this graph is built.
+        publisherId = { publisherId },
+        // Empty means the production gateway. A debug build points at a dev one.
+        gatewayAddresses = BuildConfig.GATEWAY_URL.takeIf { it.isNotBlank() }?.let { listOf(it) }.orEmpty(),
     )
     val workerPrefs = WorkerPrefs(app)
     val account = AccountCoordinator(
-        authManager, deviceRegistration, gatewayClient, logger, scope,
+        authManager, proxyController, logger, scope,
         // Sticky Stop: the coordinator must not resurrect a worker the user
         // turned off (startup heal, sign-in reconnect).
         isWorkerEnabled = { workerPrefs.workerEnabled },
-        // Pairing succeeded during interactive sign-in (app foreground) — a
-        // legal moment to raise the foreground service.
+        // Sign-in completed in the foreground — a legal moment to raise the
+        // foreground service.
         onWorkerEligible = { WorkerServiceLauncher.startIfEligible(app, this) },
     )
 
@@ -112,12 +100,8 @@ class AppGraph(app: Application) {
         runCatching { LogRetention.apply(logDir, LocalDate.now(ZoneOffset.UTC)) }
         logger.info(
             "app.start",
-            mapOf("machine_id" to machineId, "sdk" to Build.VERSION.SDK_INT, "geckoview" to geckoVersion),
+            mapOf("machine_id" to machineId, "sdk" to Build.VERSION.SDK_INT, "app" to appVersion),
         )
-        browserManager.start()
-        // Worker connection is gated on device pairing (the gateway rejects
-        // unpaired workers); the coordinator starts it when a token exists and
-        // heals signed-in-but-unregistered installs.
         account.onAppStart()
     }
 }

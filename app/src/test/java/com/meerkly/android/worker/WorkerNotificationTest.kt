@@ -1,35 +1,43 @@
 package com.meerkly.android.worker
 
 import com.meerkly.android.R
-import com.meerkly.android.gateway.WorkerConnection
+import com.meerkly.android.proxy.ProxyState
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
 /**
- * Pins every [WorkerConnection] to honest notification copy: the ongoing
+ * Pins every [ProxyState] to honest notification copy: the ongoing
  * notification must never claim more than the dashboard would (the static
  * "Connected" lie, once removed, must not sneak back in via the shade).
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class WorkerNotificationTest {
 
+    private val context = RuntimeEnvironment.getApplication()
+
+    private fun textOf(state: ProxyState): String =
+        WorkerNotification.build(context, state).extras
+            ?.getCharSequence(android.app.Notification.EXTRA_TEXT)
+            .toString()
+
     @Test
-    fun `every connection state maps to honest copy`() {
-        assertEquals(R.string.notif_text_connected, WorkerNotification.textFor(WorkerConnection.Connected))
-        assertEquals(R.string.notif_text_connecting, WorkerNotification.textFor(WorkerConnection.Connecting))
-        assertEquals(R.string.notif_text_connecting, WorkerNotification.textFor(WorkerConnection.Registering))
-        assertEquals(R.string.notif_text_offline, WorkerNotification.textFor(WorkerConnection.Offline))
-        assertEquals(R.string.notif_text_unpaired, WorkerNotification.textFor(WorkerConnection.Unpaired))
-        // Shouldn't be visible in practice (launcher never starts a gateway-less
-        // build; Disconnected is transient) — least-wrong copy if they are.
-        assertEquals(R.string.notif_text_connecting, WorkerNotification.textFor(WorkerConnection.Disabled))
-        assertEquals(R.string.notif_text_connecting, WorkerNotification.textFor(WorkerConnection.Disconnected))
+    fun `every proxy state maps to honest copy`() {
+        assertEquals(context.getString(R.string.worker_notification_earning), textOf(ProxyState.Connected))
+        assertEquals(context.getString(R.string.worker_notification_connecting), textOf(ProxyState.Connecting))
+        assertEquals(context.getString(R.string.worker_notification_problem), textOf(ProxyState.Failed))
+        assertEquals(context.getString(R.string.worker_notification_paused), textOf(ProxyState.Disconnected))
+        assertEquals(context.getString(R.string.worker_notification_paused), textOf(ProxyState.Stopped))
     }
 
     @Test
     fun `only the earning state claims to be helping`() {
-        val helping = WorkerConnection.entries.filter {
-            WorkerNotification.textFor(it) == R.string.notif_text_connected
-        }
-        assertEquals(listOf(WorkerConnection.Connected), helping)
+        val earning = context.getString(R.string.worker_notification_earning)
+        val helping = ProxyState.entries.filter { textOf(it) == earning }
+        assertEquals(listOf(ProxyState.Connected), helping)
     }
 }

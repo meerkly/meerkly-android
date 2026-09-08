@@ -10,9 +10,8 @@ data class DiagnosticsMeta(
     val deviceModel: String,
     val locale: String,
     val timezone: String,
-    val geckoViewVersion: String?,
-    val profileStatus: String,
-    val latestNavigation: Map<String, Any?>?,
+    val proxyState: String,
+    val clientKey: String?,
     val logRetention: Map<String, Any?>,
     val generatedAt: String,
 )
@@ -27,9 +26,8 @@ object DiagnosticsJson {
             "device_model" to meta.deviceModel,
             "locale" to meta.locale,
             "timezone" to meta.timezone,
-            "geckoview_version" to meta.geckoViewVersion,
-            "profile_status" to meta.profileStatus,
-            "latest_navigation" to meta.latestNavigation,
+            "proxy_state" to meta.proxyState,
+            "client_key" to meta.clientKey,
             "log_retention" to meta.logRetention,
             "generated_at" to meta.generatedAt,
         )

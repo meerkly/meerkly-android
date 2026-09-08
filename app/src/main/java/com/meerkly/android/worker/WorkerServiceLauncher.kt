@@ -4,14 +4,12 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import com.meerkly.android.AppGraph
-import com.meerkly.android.BuildConfig
 
 /**
  * The single place that decides whether the worker service should run. Every
  * start path funnels through here — MainActivity.onStart, post-pairing,
  * BootReceiver — so the eligibility rule can't drift between them:
- * the user hasn't stopped it, the device is paired, and this build has a
- * gateway at all.
+ * the user hasn't stopped it, and we know which account to earn for.
  */
 object WorkerServiceLauncher {
 
@@ -33,8 +31,7 @@ object WorkerServiceLauncher {
         val repost = shouldRepostNotification(
             granted = granted,
             workerEnabled = graph.workerPrefs.workerEnabled,
-            deviceToken = graph.deviceRegistration.getDeviceToken(),
-            gatewayUrl = BuildConfig.GATEWAY_URL,
+            publisherId = graph.publisherId,
         )
         if (!repost) return false
         // startForegroundService on an ALREADY-running service still runs
@@ -55,31 +52,24 @@ object WorkerServiceLauncher {
 
     fun isEligible(graph: AppGraph): Boolean = eligible(
         workerEnabled = graph.workerPrefs.workerEnabled,
-        deviceToken = graph.deviceRegistration.getDeviceToken(),
-        gatewayUrl = BuildConfig.GATEWAY_URL,
+        publisherId = graph.publisherId,
     )
 
-    /** The rule itself, pure so tests can pin every combination. */
-    internal fun eligible(workerEnabled: Boolean, deviceToken: String?, gatewayUrl: String): Boolean =
-        workerEnabled && deviceToken != null && gatewayUrl.isNotBlank()
-
     /**
-     * Should a notification-permission result re-post the ongoing notification?
+     * The rule itself, pure so tests can pin every combination.
      *
-     * On a fresh install the service starts at pairing, before the checklist
-     * asks for POST_NOTIFICATIONS. Android 13+ runs such a service but keeps its
-     * notification out of the drawer (it shows only in Task Manager), and the
-     * only things that post it are [WorkerService]'s startForeground and a
-     * change in the gateway connection state — neither of which a permission
-     * grant triggers. The worker then runs invisibly until something restarts
-     * the service.
+     * The old rule also required a device token and a compiled-in gateway URL.
+     * Neither exists now: the SDK authenticates by publisher id, and an empty
+     * gateway list means "the production gateway" rather than "no gateway".
      */
+    internal fun eligible(workerEnabled: Boolean, publisherId: String?): Boolean =
+        workerEnabled && !publisherId.isNullOrBlank()
+
     internal fun shouldRepostNotification(
         granted: Boolean,
         workerEnabled: Boolean,
-        deviceToken: String?,
-        gatewayUrl: String,
-    ): Boolean = granted && eligible(workerEnabled, deviceToken, gatewayUrl)
+        publisherId: String?,
+    ): Boolean = granted && eligible(workerEnabled, publisherId)
 
     /** User re-enabled or explicitly stopped from in-app UI. */
     fun stop(context: Context) {

@@ -6,7 +6,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.meerkly.android.data.DemoData
 import com.meerkly.android.diagnostics.DiagnosticsExporter
 import com.meerkly.android.ui.MainViewModel
 import com.meerkly.android.ui.RootScreen
@@ -31,12 +30,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // Debug-only, like EXTRA_SCREEN below: seeds placeholder crawls so
-        // scripts/screenshots.sh never shoots an empty activity feed (the ring
-        // is in-memory and starts empty on every cold start).
-        if (BuildConfig.DEBUG && intent?.hasExtra(EXTRA_DEMO) == true) {
-            DemoData.seed((application as MeerklyApp).graph.recentRepo)
-        }
         setContent {
             MeerklyTheme {
                 val vm: MainViewModel = viewModel()

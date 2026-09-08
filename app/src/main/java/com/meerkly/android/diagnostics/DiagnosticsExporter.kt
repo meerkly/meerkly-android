@@ -4,10 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.content.FileProvider
-import com.meerkly.android.data.RecentNavigationRepository
 import com.meerkly.android.logging.AppLogger
 import com.meerkly.android.logging.LogRetention
-import com.meerkly.android.model.BrowserStatus
+import com.meerkly.android.proxy.ProxyState
 import com.meerkly.android.util.MiniJson
 import com.meerkly.android.util.ZipUtils
 import java.io.File
@@ -16,19 +15,18 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Builds a diagnostics ZIP (diagnostics.json, machine.json, app.json, browser_status.json,
- * recent_navigations.json, and the logs/ jsonl files) under cacheDir/diagnostics and shares it via
- * FileProvider. Full page HTML is never included.
+ * Builds a diagnostics ZIP (diagnostics.json, machine.json, app.json, proxy_status.json,
+ * and the logs/ jsonl files) under cacheDir/diagnostics and shares it via FileProvider.
+ * No page content and no publisher id are ever included.
  */
 class DiagnosticsExporter(
     private val context: Context,
     private val logger: AppLogger,
-    private val recentRepo: RecentNavigationRepository,
     private val machineId: String,
-    private val geckoViewVersion: String?,
+    private val appVersion: String,
     private val retentionPolicy: LogRetention.Policy = LogRetention.Policy(),
 ) {
-    fun export(status: BrowserStatus): File {
+    fun export(proxyState: ProxyState, clientKey: String?): File {
         val now = Instant.now()
         val stamp = now.toString().replace(":", "-")
         val outDir = File(context.cacheDir, "diagnostics").apply { mkdirs() }
@@ -36,14 +34,13 @@ class DiagnosticsExporter(
 
         val meta = DiagnosticsMeta(
             machineId = machineId,
-            appVersion = appVersion(),
+            appVersion = appVersion,
             androidSdkInt = Build.VERSION.SDK_INT,
             deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
             locale = Locale.getDefault().toLanguageTag(),
             timezone = TimeZone.getDefault().id,
-            geckoViewVersion = geckoViewVersion,
-            profileStatus = "app-scoped default GeckoRuntime profile",
-            latestNavigation = recentRepo.latest()?.toJsonMap(),
+            proxyState = proxyState.name,
+            clientKey = clientKey,
             logRetention = linkedMapOf(
                 "keep_days" to retentionPolicy.keepDays,
                 "max_total_bytes" to retentionPolicy.maxTotalBytes,
@@ -56,15 +53,15 @@ class DiagnosticsExporter(
         File(staging, "app.json").writeText(
             MiniJson.encode(
                 linkedMapOf(
-                    "app_version" to appVersion(),
+                    "app_version" to appVersion,
                     "package" to context.packageName,
                     "android_sdk_int" to Build.VERSION.SDK_INT,
-                    "geckoview_version" to geckoViewVersion,
                 )
             )
         )
-        File(staging, "browser_status.json").writeText(MiniJson.encode(statusToMap(status)))
-        File(staging, "recent_navigations.json").writeText(MiniJson.encode(recentRepo.snapshotJsonMaps()))
+        File(staging, "proxy_status.json").writeText(
+            MiniJson.encode(linkedMapOf("state" to proxyState.name, "client_key" to clientKey)),
+        )
 
         val entries = mutableListOf<Pair<String, File>>()
         staging.listFiles()?.forEach { entries.add(it.name to it) }
@@ -76,17 +73,6 @@ class DiagnosticsExporter(
         staging.deleteRecursively()
         logger.info("diagnostics.exported", mapOf("zip" to zip.name, "entries" to entries.size))
         return zip
-    }
-
-    private fun appVersion(): String = runCatching {
-        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
-    }.getOrDefault("unknown")
-
-    private fun statusToMap(status: BrowserStatus): Map<String, Any?> = when (status) {
-        is BrowserStatus.Idle -> mapOf("state" to "idle")
-        is BrowserStatus.Loading -> linkedMapOf("state" to "loading", "requested_url" to status.requestedUrl)
-        is BrowserStatus.Success -> linkedMapOf("state" to "success", "result" to status.result.toJsonMap())
-        is BrowserStatus.Error -> linkedMapOf("state" to "error", "result" to status.result.toJsonMap())
     }
 
     companion object {

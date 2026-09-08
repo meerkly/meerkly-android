@@ -8,79 +8,39 @@ import org.junit.Test
 class WorkerServiceLauncherTest {
 
     @Test
-    fun `eligible only when enabled, paired, and a gateway exists`() {
-        assertTrue(WorkerServiceLauncher.eligible(true, "tok", "wss://gw/v1/connect"))
+    fun `eligible only when enabled and a publisher id is known`() {
+        assertTrue(WorkerServiceLauncher.eligible(workerEnabled = true, publisherId = "pub_abc"))
     }
 
     @Test
-    fun `a sticky user stop wins over everything`() {
-        assertFalse(WorkerServiceLauncher.eligible(false, "tok", "wss://gw/v1/connect"))
+    fun `a stopped worker is never eligible`() {
+        // The sticky-Stop invariant: nothing auto-starts a worker the user
+        // turned off — not boot, not app open, not a sticky restart.
+        assertFalse(WorkerServiceLauncher.eligible(workerEnabled = false, publisherId = "pub_abc"))
     }
 
     @Test
-    fun `unpaired devices never raise the service`() {
-        assertFalse(WorkerServiceLauncher.eligible(true, null, "wss://gw/v1/connect"))
+    fun `no publisher id means nothing to earn for`() {
+        assertFalse(WorkerServiceLauncher.eligible(workerEnabled = true, publisherId = null))
+        assertFalse(WorkerServiceLauncher.eligible(workerEnabled = true, publisherId = ""))
+        assertFalse(WorkerServiceLauncher.eligible(workerEnabled = true, publisherId = "   "))
     }
 
     @Test
-    fun `a build with no gateway never raises the service`() {
-        // Matches WorkerConnection.Disabled semantics: no notification for a
-        // build that can never connect.
-        assertFalse(WorkerServiceLauncher.eligible(true, "tok", ""))
-    }
-
-    // --- re-posting the ongoing notification after a late permission grant ---
-    //
-    // On a fresh install the service starts at pairing, BEFORE the checklist
-    // asks for POST_NOTIFICATIONS. Android 13+ keeps such a service running but
-    // hides its notification from the drawer, and nothing in the app re-posted
-    // it once the permission arrived — so the worker ran invisibly until the
-    // user toggled background mode off and on again.
-
-    @Test
-    fun `a late notification grant re-posts the ongoing notification`() {
+    fun `a notification grant reposts only when the worker should be running`() {
         assertTrue(
             WorkerServiceLauncher.shouldRepostNotification(
-                granted = true,
-                workerEnabled = true,
-                deviceToken = "tok",
-                gatewayUrl = "wss://gw/v1/connect",
+                granted = true, workerEnabled = true, publisherId = "pub_abc",
             ),
         )
-    }
-
-    @Test
-    fun `a denied notification permission posts nothing`() {
         assertFalse(
             WorkerServiceLauncher.shouldRepostNotification(
-                granted = false,
-                workerEnabled = true,
-                deviceToken = "tok",
-                gatewayUrl = "wss://gw/v1/connect",
+                granted = false, workerEnabled = true, publisherId = "pub_abc",
             ),
         )
-    }
-
-    @Test
-    fun `a notification grant never resurrects a worker the user stopped`() {
         assertFalse(
             WorkerServiceLauncher.shouldRepostNotification(
-                granted = true,
-                workerEnabled = false,
-                deviceToken = "tok",
-                gatewayUrl = "wss://gw/v1/connect",
-            ),
-        )
-    }
-
-    @Test
-    fun `a notification grant on an unpaired device posts nothing`() {
-        assertFalse(
-            WorkerServiceLauncher.shouldRepostNotification(
-                granted = true,
-                workerEnabled = true,
-                deviceToken = null,
-                gatewayUrl = "wss://gw/v1/connect",
+                granted = true, workerEnabled = false, publisherId = "pub_abc",
             ),
         )
     }

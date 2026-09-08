@@ -57,10 +57,10 @@
     <!-- Ongoing worker notification -->
     <string name="notif_channel_name">Background worker</string>
     <string name="notif_title">Meerkly</string>
-    <string name="notif_text_connected">Helping out</string>
-    <string name="notif_text_connecting">Connecting…</string>
-    <string name="notif_text_offline">Reconnecting…</string>
-    <string name="notif_text_unpaired">Needs linking — open the app</string>
+    <string name="worker_notification_earning">Helping out</string>
+    <string name="worker_notification_connecting">Connecting…</string>
+    <string name="worker_notification_problem">Connection problem</string>
+    <string name="worker_notification_paused">Paused</string>
     <string name="notif_action_stop">Stop</string>
 
     <!-- Getting started checklist (hides itself once every step is done) -->
