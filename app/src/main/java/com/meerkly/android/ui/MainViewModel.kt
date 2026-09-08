@@ -13,11 +13,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.meerkly.android.MeerklyApp
 import com.meerkly.android.model.AuthStatus
-import com.meerkly.android.model.BrowserStatus
-import com.meerkly.android.gateway.WorkerConnection
-import com.meerkly.android.model.CreditsState
-import com.meerkly.android.model.NavigationResult
-import com.meerkly.android.util.UrlValidator
+import com.meerkly.android.model.EarningsState
+import com.meerkly.android.proxy.ProxyState
 import com.meerkly.android.worker.WorkerServiceLauncher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,37 +23,35 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.time.Instant
 
 data class MachineInfo(
     val machineId: String,
     val appVersion: String,
     val deviceModel: String,
     val androidSdk: Int,
-    val geckoViewVersion: String?,
-    val profileStatus: String,
+    // Literal, not BuildConfig: no field exists for it yet. libs.versions.toml
+    // (meerklySdk) is the source of truth this must be kept in sync with.
+    val sdkVersion: String,
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val graph = (app as MeerklyApp).graph
 
-    val browserManager = graph.browserManager
-    val logs = graph.logger.recentEntries
-    val recent = graph.recentRepo.recent
-
-    private val _status = MutableStateFlow<BrowserStatus>(BrowserStatus.Idle)
-    val status: StateFlow<BrowserStatus> = _status.asStateFlow()
-
     // Sign-in + device-link state driving the root UI (gate vs dashboard).
     val authStatus: StateFlow<AuthStatus> = graph.account.status
 
-    // The signed-in user's earnings for the dashboard cards. Unknown until a
-    // fetch succeeds — the UI must render that as "unknown", never as 0.
-    val credits: StateFlow<CreditsState> = graph.account.credits
+    /** Live proxy state, so Home can stop claiming "Connected". */
+    val proxyState: StateFlow<ProxyState> = graph.proxyController.state
 
-    /** Live worker socket state, so the dashboard can stop claiming "Connected". */
-    val connection: StateFlow<WorkerConnection> = graph.gatewayClient.connection
+    /** The reason the last start failed, or null. */
+    val proxyError: StateFlow<String?> = graph.proxyController.lastError
+
+    /** The account's earnings. Unknown until a fetch succeeds — never render 0. */
+    val earnings: StateFlow<EarningsState> = graph.account.earnings
+
+    /** This install's device id, so Devices can mark its own row. */
+    val deviceId: String = graph.machineId
 
     // ---- Background worker control (sticky Stop / Start) -------------------
 
@@ -72,11 +67,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _workerEnabled.value = enabled
         val app = getApplication<Application>()
         if (enabled) {
-            graph.gatewayClient.start()
+            graph.proxyController.start()
             WorkerServiceLauncher.startIfEligible(app, graph)
             graph.logger.info("worker.started_by_user", mapOf("via" to "dashboard"))
         } else {
-            graph.gatewayClient.stop()
+            graph.proxyController.stop()
             WorkerServiceLauncher.stop(app)
             graph.logger.info("worker.stopped_by_user", mapOf("via" to "dashboard"))
         }
@@ -159,27 +154,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Refresh earnings (e.g. when the dashboard is shown). */
-    fun refreshCredits() = graph.account.refreshCredits()
-
-    /**
-     * Debug view: whether the automation browser is on screen. Mirrors the
-     * desktop's toggle-browser-window — the worker's GeckoView is always
-     * composed and active, this only decides whether it's expanded into a
-     * visible panel or collapsed to the offscreen 1dp surface extraction needs.
-     * Lives here (not in the manager) so it survives rotation with the rest of
-     * the UI state; the engine itself is unaffected either way.
-     */
-    private val _browserVisible = MutableStateFlow(false)
-    val browserVisible: StateFlow<Boolean> = _browserVisible.asStateFlow()
-
-    /** Show/hide the automation browser. Returns nothing — observe [browserVisible]. */
-    fun toggleBrowserVisible() {
-        _browserVisible.value = !_browserVisible.value
-    }
-
-    fun hideBrowser() {
-        _browserVisible.value = false
-    }
+    fun refreshEarnings() = graph.account.refreshEarnings()
 
     private val _signingIn = MutableStateFlow(false)
     val signingIn: StateFlow<Boolean> = _signingIn.asStateFlow()
@@ -220,48 +195,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }.getOrDefault("?"),
         deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
         androidSdk = Build.VERSION.SDK_INT,
-        geckoViewVersion = graph.geckoVersion,
-        profileStatus = "app-scoped default profile",
+        sdkVersion = "0.6.0",
     )
-
-    fun onOpen(input: String) {
-        UrlValidator.validateAndNormalize(input).fold(
-            onSuccess = { url ->
-                _status.value = BrowserStatus.Loading(url)
-                viewModelScope.launch {
-                    val nav = graph.browserManager.navigate(url)
-                    graph.recentRepo.record(nav)
-                    graph.logger.info("browser.navigation_completed", nav.toJsonMap())
-                    _status.value = if (nav.success) BrowserStatus.Success(nav) else BrowserStatus.Error(nav)
-                }
-            },
-            onFailure = { e ->
-                val now = Instant.now()
-                graph.logger.warn("url.rejected", mapOf("input" to input, "error" to e.message))
-                _status.value = BrowserStatus.Error(
-                    NavigationResult(
-                        success = false,
-                        requestedUrl = input,
-                        finalUrl = null,
-                        title = null,
-                        error = e.message ?: "Invalid URL",
-                        startedAt = now,
-                        finishedAt = now,
-                        loadedMs = null,
-                        htmlSizeBytes = null,
-                    )
-                )
-            },
-        )
-    }
-
-    fun onStop() = graph.browserManager.stopLoading()
-
-    fun onReload() = graph.browserManager.reload()
 
     /** Builds the diagnostics ZIP off the main thread and returns it for sharing. */
     suspend fun buildDiagnostics(): File = withContext(Dispatchers.IO) {
-        graph.recentRepo.persist(File(getApplication<Application>().filesDir, "recent_navigations.json"))
-        graph.diagnostics.export(_status.value)
+        // clientKey is internal to ProxyController (logged, never exposed) —
+        // there is nothing meaningful to pass here.
+        graph.diagnostics.export(proxyState.value, null)
     }
 }

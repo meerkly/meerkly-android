@@ -2,6 +2,10 @@ package com.meerkly.android.data
 
 import android.app.Application
 import android.content.Context
+import com.meerkly.android.logging.AppLogger
+import com.meerkly.android.model.LogEntry
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -14,6 +18,19 @@ import org.robolectric.annotation.Config
 private class FakeCrypto : SecureStoreCrypto {
     override fun encrypt(plaintext: ByteArray) = plaintext.map { (it.toInt() xor 0x5A).toByte() }.toByteArray()
     override fun decrypt(blob: ByteArray) = blob.map { (it.toInt() xor 0x5A).toByte() }.toByteArray()
+}
+
+/**
+ * Discards everything. This test only cares about [KeystoreSecureStore]'s
+ * storage behaviour, not what it logs — was referenced but never defined,
+ * which failed the whole module's test compilation before this file's
+ * behaviour ever ran.
+ */
+private class NoopLogger : AppLogger {
+    override fun info(event: String, data: Map<String, Any?>) {}
+    override fun warn(event: String, data: Map<String, Any?>) {}
+    override fun error(event: String, data: Map<String, Any?>) {}
+    override val recentEntries: StateFlow<List<LogEntry>> = MutableStateFlow(emptyList())
 }
 
 @RunWith(RobolectricTestRunner::class)

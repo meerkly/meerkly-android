@@ -115,6 +115,12 @@ class ProxyControllerTest {
         assertEquals("dev_test", handle.config?.deviceId)
         assertEquals("kotlin", handle.config?.sdk)
         assertEquals("meerkly-android/2.0.0", handle.config?.app)
+
+        // A started controller's poll job re-schedules itself every second
+        // forever. Left running, runTest's own end-of-test drain — it shares
+        // this test's testScheduler across every TestScope built from it —
+        // never reaches "idle" and hangs for real, not just virtually.
+        controller.shutdown()
     }
 
     @Test
@@ -153,6 +159,10 @@ class ProxyControllerTest {
         advanceTimeBy(100)
 
         assertEquals("a process is one exit node", 1, handle.started)
+
+        // See the note in the first test: an un-cancelled poll job hangs
+        // runTest's own cleanup, which shares this scheduler.
+        controller.shutdown()
     }
 
     @Test
@@ -169,6 +179,10 @@ class ProxyControllerTest {
         advanceTimeBy(1_500)
 
         assertEquals(ProxyState.Connecting, controller.state.value)
+
+        // See the note in the first test: an un-cancelled poll job hangs
+        // runTest's own cleanup, which shares this scheduler.
+        controller.shutdown()
     }
 
     @Test

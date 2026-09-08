@@ -6,7 +6,6 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,7 +35,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
-import com.meerkly.android.BuildConfig
 import com.meerkly.android.R
 import com.meerkly.android.ui.components.ContentColumn
 import com.meerkly.android.ui.theme.Cream
@@ -55,14 +53,13 @@ import kotlinx.coroutines.launch
  * rows (previously only inside GettingStartedCard, which disappears for good
  * once complete — so revoking notifications later left no way back),
  * diagnostics export (previously debug-builds-only, so you could never ask a
- * real user for a bundle), and the device facts DeviceInfo has always gathered
+ * real user for a bundle), and the device facts this app has always gathered
  * and never shown.
  */
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
     onShareDiagnostics: (java.io.File) -> Unit,
-    onDebugTools: () -> Unit,
     onSignOut: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -72,7 +69,6 @@ fun SettingsScreen(
     val workerEnabled by viewModel.workerEnabled.collectAsState()
     val batteryExempt by viewModel.batteryExempt.collectAsState()
     val notificationsGranted by viewModel.notificationsGranted.collectAsState()
-    val browserVisible by viewModel.browserVisible.collectAsState()
 
     var notificationsPermanentlyDenied by rememberSaveable { mutableStateOf(false) }
     var exporting by rememberSaveable { mutableStateOf(false) }
@@ -100,14 +96,6 @@ fun SettingsScreen(
                 actionLabel = stringResource(if (workerEnabled) R.string.worker_stop else R.string.worker_start),
                 actionColor = if (workerEnabled) RoseDeep else EmeraldDeep,
                 onAction = { viewModel.setWorkerEnabled(!workerEnabled) },
-            )
-            SettingRow(
-                title = stringResource(R.string.settings_watch_title),
-                note = stringResource(R.string.settings_watch_note),
-                actionLabel = stringResource(
-                    if (browserVisible) R.string.browser_hide else R.string.browser_show,
-                ),
-                onAction = viewModel::toggleBrowserVisible,
             )
 
             Section(stringResource(R.string.settings_section_permissions))
@@ -162,13 +150,7 @@ fun SettingsScreen(
             FactRow(stringResource(R.string.settings_device_id), info.machineId)
             FactRow(stringResource(R.string.settings_app_version), info.appVersion)
             FactRow(stringResource(R.string.settings_model), "${info.deviceModel} · Android ${info.androidSdk}")
-            FactRow(
-                stringResource(R.string.settings_engine),
-                info.geckoViewVersion ?: Formatters_UNKNOWN,
-                // Debug tools used to hang off a footer long-press; the footer
-                // is gone, so the engine row inherits it.
-                onLongPress = { if (BuildConfig.DEBUG) onDebugTools() },
-            )
+            FactRow(stringResource(R.string.settings_sdk_version), info.sdkVersion)
 
             SettingRow(
                 title = stringResource(R.string.dash_sign_out),
@@ -180,8 +162,6 @@ fun SettingsScreen(
         }
     }
 }
-
-private const val Formatters_UNKNOWN = "—"
 
 @Composable
 private fun Section(title: String) {
@@ -227,20 +207,10 @@ private fun SettingRow(
     }
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun FactRow(label: String, value: String, onLongPress: (() -> Unit)? = null) {
+private fun FactRow(label: String, value: String) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                if (onLongPress != null) {
-                    Modifier.combinedClickable(onClick = {}, onLongClick = onLongPress)
-                } else {
-                    Modifier
-                },
-            )
-            .padding(horizontal = 2.dp, vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = InkSoft)

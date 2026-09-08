@@ -31,7 +31,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.meerkly.android.R
-import com.meerkly.android.gateway.WorkerConnection
+import com.meerkly.android.proxy.ProxyState
 import com.meerkly.android.ui.theme.Cream
 import com.meerkly.android.ui.theme.Emerald
 import com.meerkly.android.ui.theme.Gold
@@ -40,25 +40,30 @@ import com.meerkly.android.ui.theme.Rose
 import com.meerkly.android.ui.theme.Sand
 
 /**
- * The worker's real socket state. This used to be a static "Connected" label,
+ * The proxy's real client state. This used to be a static "Connected" label,
  * which told people they were earning while the gateway was unreachable — the
- * dot only pulses when the worker is genuinely in the dispatch pool.
+ * dot only pulses when the client is genuinely connected.
+ *
+ * [DashboardScreen] only shows this while the worker is user-enabled — a
+ * disabled worker gets its own static "Off" chip instead — so in practice this
+ * sees [ProxyState.Disconnected], [ProxyState.Connecting], [ProxyState.Connected]
+ * and [ProxyState.Failed]. [ProxyState.Stopped] is handled too, defensively,
+ * since the `when` must be exhaustive.
  */
 @Composable
-internal fun ConnectionChip(connection: WorkerConnection) {
+internal fun ConnectionChip(state: ProxyState) {
     val pulse by rememberInfiniteTransition(label = "live")
         .animateFloat(
             initialValue = 0.4f, targetValue = 1f,
             animationSpec = infiniteRepeatable(tween(1000, easing = LinearEasing), RepeatMode.Reverse),
             label = "liveAlpha",
         )
-    val (labelRes, dot) = when (connection) {
-        WorkerConnection.Connected -> R.string.conn_connected to Emerald
-        WorkerConnection.Connecting, WorkerConnection.Registering -> R.string.conn_connecting to Gold
-        WorkerConnection.Offline -> R.string.conn_offline to Rose
-        WorkerConnection.Unpaired -> R.string.conn_unpaired to Rose
-        WorkerConnection.Disconnected -> R.string.conn_offline to Rose
-        WorkerConnection.Disabled -> R.string.conn_disabled to InkSoft
+    val (labelRes, dot) = when (state) {
+        ProxyState.Connected -> R.string.conn_connected to Emerald
+        ProxyState.Connecting -> R.string.conn_connecting to Gold
+        ProxyState.Failed -> R.string.conn_offline to Rose
+        ProxyState.Disconnected -> R.string.conn_offline to Rose
+        ProxyState.Stopped -> R.string.conn_disabled to InkSoft
     }
     Surface(color = Cream, shape = RoundedCornerShape(999.dp), border = BorderStroke(1.dp, Sand)) {
         Row(
@@ -71,7 +76,7 @@ internal fun ConnectionChip(connection: WorkerConnection) {
                     .size(8.dp)
                     // Only the earning state animates; a steady dot reads as
                     // "stopped" at a glance.
-                    .alpha(if (connection.isEarning) pulse else 1f)
+                    .alpha(if (state.isEarning) pulse else 1f)
                     .background(dot, CircleShape),
             )
             Text(

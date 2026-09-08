@@ -7,37 +7,30 @@ import java.util.Locale
 class FormattersTest {
 
     @Test
-    fun `credits group by the reader's locale`() {
-        assertEquals("12,300 credits", Formatters.credits(12_300, Locale.US))
-        // Regression: this used to call "%,d".format() with the implicit default
-        // locale, so the assertion above passed in en-US and failed in de-DE.
-        assertEquals("12.300 credits", Formatters.credits(12_300, Locale.GERMANY))
+    fun `bytes step through decimal units`() {
+        assertEquals("512 B", Formatters.bytes(512, Locale.US))
+        assertEquals("2 KB", Formatters.bytes(2_000, Locale.US))
+        assertEquals("1.5 MB", Formatters.bytes(1_500_000, Locale.US))
+        assertEquals("2.50 GB", Formatters.bytes(2_500_000_000, Locale.US))
     }
 
     @Test
-    fun `dollars stay US-formatted because the dollar sign is hard-coded`() {
-        // Not locale-dependent by design: "$0,02" reads as a typo.
+    fun `usd always shows cents`() {
+        assertEquals("$0.00", Formatters.usd(0.0))
+        assertEquals("$0.20", Formatters.usd(0.2))
+        assertEquals("$12.30", Formatters.usd(12.3))
+    }
+
+    @Test
+    fun `usd stays US-formatted even when the default locale is not`() {
+        // Not locale-dependent by design: "$0,20" reads as a typo.
         val previous = Locale.getDefault()
         try {
             Locale.setDefault(Locale.GERMANY)
-            assertEquals("≈ $0.02", Formatters.dollars(12_300))
+            assertEquals("$0.20", Formatters.usd(0.2))
         } finally {
             Locale.setDefault(previous)
         }
-    }
-
-    @Test
-    fun `dollars round to cents`() {
-        assertEquals("≈ $1.00", Formatters.dollars(500_000))
-        assertEquals("≈ $0.00", Formatters.dollars(100))
-        assertEquals("≈ $0.11", Formatters.dollars(57_000))
-    }
-
-    @Test
-    fun `bytes step through the units`() {
-        assertEquals("512 B", Formatters.bytes(512, Locale.US))
-        assertEquals("2 KB", Formatters.bytes(2_048, Locale.US))
-        assertEquals("1.5 MB", Formatters.bytes(1_572_864, Locale.US))
     }
 
     @Test

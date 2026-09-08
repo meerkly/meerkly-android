@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import com.meerkly.android.model.DeviceEarnings
+import com.meerkly.android.ui.nav.WindowWidth
 import com.meerkly.android.ui.theme.Bone
 import com.meerkly.android.ui.theme.MeerklyTheme
 import org.junit.Test
@@ -86,6 +88,23 @@ class DesignRenderTest {
                 Modifier.fillMaxSize(),
                 contentAlignment = androidx.compose.ui.Alignment.BottomCenter,
             ) { MeerklyNavigationBarPreview() }
+        }
+    }
+
+    @Test
+    fun `devices screen renders`() {
+        val devices = listOf(
+            DeviceEarnings(
+                deviceId = "dev_a", label = "Kitchen phone", online = true,
+                bytes30d = 2_000_000_000, usd30d = 0.42, pending = false,
+            ),
+            DeviceEarnings(
+                deviceId = "dev_b", label = "basement-pi", online = false,
+                bytes30d = 500_000_000, usd30d = 0.05, pending = true,
+            ),
+        )
+        render("devices") {
+            DevicesContent(devices, thisDeviceId = "dev_a", width = WindowWidth.Compact, windowDays = 30)
         }
     }
 }

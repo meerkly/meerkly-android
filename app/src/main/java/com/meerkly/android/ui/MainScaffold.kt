@@ -38,8 +38,8 @@ import com.meerkly.android.ui.theme.InkSoft
 import com.meerkly.android.ui.theme.Pink
 import kotlinx.coroutines.delay
 
-/** How often to re-fetch the balance while the app is open. */
-private const val CREDITS_POLL_MS = 30_000L
+/** How often to re-fetch earnings while the app is open. */
+private const val EARNINGS_POLL_MS = 30_000L
 
 /**
  * The signed-in shell: brand bar, tab chrome, and the current tab's content.
@@ -48,20 +48,13 @@ private const val CREDITS_POLL_MS = 30_000L
  * not the physical screen — so split-screen and freeform windows are right for
  * free, and the breakpoint decision stays a pure function ([WindowWidth]) that
  * unit tests can drive.
- *
- * Note this composable does NOT own the GeckoViewHost. That stays a sibling in
- * RootScreen's outer Box, deliberately outside BoxWithConstraints, which is a
- * SubcomposeLayout — the single-host invariant is too load-bearing to route
- * through subcomposition.
  */
 @Composable
 fun MainScaffold(
     viewModel: MainViewModel,
     auth: AuthStatus.SignedIn,
     nav: NavState,
-    backEnabled: Boolean,
     onShareDiagnostics: (java.io.File) -> Unit,
-    onDebugTools: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Hoisted out of DashboardScreen: both of these used to live there, so they
@@ -71,8 +64,8 @@ fun MainScaffold(
     // was the specific bug.
     LaunchedEffect(Unit) {
         while (true) {
-            viewModel.refreshCredits()
-            delay(CREDITS_POLL_MS)
+            viewModel.refreshEarnings()
+            delay(EARNINGS_POLL_MS)
         }
     }
     OnResume { viewModel.refreshWorkerState() }
@@ -81,7 +74,7 @@ fun MainScaffold(
         val width = WindowWidth.of(maxWidth.value)
 
         // Back order: compact detail → non-Home tab → system.
-        BackHandler(enabled = backEnabled && nav.canGoBack(width)) { nav.back(width) }
+        BackHandler(enabled = nav.canGoBack(width)) { nav.back(width) }
 
         Column(Modifier.fillMaxSize()) {
             MeerklyTopBar(auth, width)
@@ -100,7 +93,6 @@ fun MainScaffold(
                         Destination.Settings -> SettingsScreen(
                             viewModel = viewModel,
                             onShareDiagnostics = onShareDiagnostics,
-                            onDebugTools = onDebugTools,
                             onSignOut = {
                                 // Reset first: otherwise the saved tab restores
                                 // on the next sign-in.

@@ -10,12 +10,22 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * The JSON contracts the app depends on. Parsing is tested against a real
  * socket rather than a hand-built string so a change in either shape fails
  * here rather than on a user's phone.
+ *
+ * Robolectric, not a plain JUnit runner: this never touches a Context, but
+ * org.json ships as a stub on the classpath a plain unit test compiles and
+ * runs against — every JSONObject method throws "not mocked". Robolectric
+ * substitutes the real platform jar, which has a real org.json.
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class AuthManagerApiTest {
 
     private lateinit var server: MockWebServer

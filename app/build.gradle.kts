@@ -42,6 +42,16 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        // AppAuth's own manifest declares a RedirectUriReceiverActivity whose
+        // intent-filter scheme is this placeholder. The app never uses that
+        // activity — AndroidManifest.xml replaces it (tools:node="replace")
+        // with an https App Link — but the merger still resolves placeholders
+        // in every manifest it merges, including the unit-test variant's
+        // (isIncludeAndroidResources pulls Robolectric into a real manifest
+        // merge). Left unresolved, that merge fails before any test runs.
+        // The value is inert: nothing reads it.
+        manifestPlaceholders["appAuthRedirectScheme"] = "unused"
+
         // Empty means "the production gateway", which is what the SDK resolves an
         // empty gatewayAddresses list to. A debug build overrides it with a dev
         // address. This is no longer a WebSocket URL — the SDK takes host:port.

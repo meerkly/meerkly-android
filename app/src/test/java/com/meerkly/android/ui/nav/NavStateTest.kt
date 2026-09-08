@@ -117,14 +117,17 @@ class NavStateTest {
     @Test
     fun `restore from a list of unexpected length falls back to Home instead of crashing`() {
         // The saved list is untrusted input: a shorter list must not throw
-        // IndexOutOfBoundsException, and a longer one (e.g. a stale 3-element
-        // pre-2.0 layout) must not misread its extra field as deviceKey.
+        // IndexOutOfBoundsException. A longer one — e.g. a stale 3-element
+        // pre-2.0 layout — resets clean too, on purpose: rememberSaveable's
+        // Bundle isn't reliably carried across a package replace anyway, so
+        // there's nothing to gain from parsing its first two fields and
+        // every reason to keep restore() simple (Saver.kt's own comment).
         val tooShort = NavState.Saver.restore(emptyList<Any?>())!!
         assertEquals(Destination.Home, tooShort.destination)
         assertNull(tooShort.deviceKey)
 
         val tooLong = NavState.Saver.restore(listOf("devices", "m-1", "old-activity-key"))!!
-        assertEquals(Destination.Devices, tooLong.destination)
+        assertEquals(Destination.Home, tooLong.destination)
         assertNull(tooLong.deviceKey)
     }
 
