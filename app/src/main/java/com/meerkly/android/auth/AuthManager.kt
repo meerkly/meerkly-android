@@ -5,8 +5,8 @@ import android.content.Intent
 import android.net.Uri
 import com.meerkly.android.data.SecureStore
 import com.meerkly.android.logging.AppLogger
-import com.meerkly.android.model.Credits
-import com.meerkly.android.model.DeviceCredits
+import com.meerkly.android.model.DeviceEarnings
+import com.meerkly.android.model.Earnings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -28,6 +28,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
+
+/** Thrown when /api/v1/me refuses because the account's email is unverified. */
+class EmailUnverifiedException : Exception()
 
 /**
  * OAuth2 sign-in against the Meerkly account portal (Doorkeeper, Authorization
@@ -71,6 +74,15 @@ class AuthManager(
     var email: String? = null
         private set
 
+    /**
+     * The account's personal publisher id, fetched at sign-in and persisted.
+     * This is what the proxy SDK is given; without it the app knows who the
+     * user is but not where their money goes.
+     */
+    @Volatile
+    var publisherId: String? = null
+        private set
+
     val isSignedIn: Boolean get() = email != null && authState.isAuthorized
 
     /** Restore the persisted session (call once at app start). */
@@ -80,6 +92,7 @@ class AuthManager(
             authState = AuthState.jsonDeserialize(raw)
             if (authState.isAuthorized) {
                 email = store.get(KEY_EMAIL)
+                publisherId = store.get(KEY_PUBLISHER_ID)
             }
         }.onFailure {
             logger.warn("auth.restore_failed", mapOf("error" to it.message))
@@ -93,13 +106,14 @@ class AuthManager(
             CLIENT_ID,
             ResponseTypeValues.CODE,
             Uri.parse(REDIRECT_URI),
-        ).setScopes("public", "worker").build() // PKCE (S256) + state are automatic
+        ).setScopes("public").build() // PKCE (S256) + state are automatic
         return authService.getAuthorizationRequestIntent(request)
     }
 
     /**
      * Completes sign-in from the redirect result: code exchange, then a
-     * /api/me lookup for the account email. Returns an error message or null.
+     * /api/v1/me lookup for the account email and publisher id. Returns an
+     * error message or null.
      */
     suspend fun completeSignIn(data: Intent?): String? {
         if (data == null) return "Sign-in was cancelled."
@@ -128,16 +142,22 @@ class AuthManager(
             return "Sign-in failed. Please try again."
         }
 
-        val fetchedEmail = fetchEmail(token.accessToken ?: "")
-        if (fetchedEmail == null) {
-            // Mirror the desktop: no userinfo -> the sign-in didn't complete.
+        val account = try {
+            fetchAccount(token.accessToken ?: "")
+        } catch (e: EmailUnverifiedException) {
+            authState = AuthState()
+            return "Confirm your email address to finish setting up Meerkly."
+        }
+        if (account == null) {
+            // No userinfo means the sign-in did not complete.
             authState = AuthState()
             return "Sign-in failed. Please try again."
         }
 
-        email = fetchedEmail
+        email = account.first
+        publisherId = account.second
         persist()
-        logger.info("auth.signed_in", mapOf("email" to fetchedEmail))
+        logger.info("auth.signed_in", mapOf("email" to account.first, "paired" to (account.second != null)))
         return null
     }
 
@@ -195,53 +215,78 @@ class AuthManager(
     private fun clearSession() {
         authState = AuthState()
         email = null
+        publisherId = null
         store.remove(KEY_AUTH_STATE)
         store.remove(KEY_EMAIL)
+        store.remove(KEY_PUBLISHER_ID)
     }
 
     private fun persist() {
         store.put(KEY_AUTH_STATE, authState.jsonSerializeString())
         email?.let { store.put(KEY_EMAIL, it) }
+        publisherId?.let { store.put(KEY_PUBLISHER_ID, it) }
     }
 
-    private suspend fun fetchEmail(accessToken: String): String? = withContext(Dispatchers.IO) {
-        runCatching {
-            http.newCall(
-                Request.Builder()
-                    .url("$baseUrl/api/me")
-                    .header("Authorization", "Bearer $accessToken")
-                    .build(),
-            ).execute().use { res ->
-                if (!res.isSuccessful) return@use null
-                JSONObject(res.body?.string() ?: "").optString("email").takeIf { it.isNotBlank() }
-            }
-        }.onFailure { logger.warn("auth.userinfo_failed", mapOf("error" to it.message)) }.getOrNull()
+    /** (email, publisherId) from /api/v1/me, or null if the call failed. */
+    private suspend fun fetchAccount(accessToken: String): Pair<String, String?>? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                http.newCall(
+                    Request.Builder()
+                        .url("$baseUrl/api/v1/me")
+                        .header("Authorization", "Bearer $accessToken")
+                        .build(),
+                ).execute().use { res ->
+                    if (res.code == 403) {
+                        val err = runCatching {
+                            JSONObject(res.body?.string() ?: "").optString("error")
+                        }.getOrNull()
+                        if (err == ERROR_EMAIL_UNVERIFIED) throw EmailUnverifiedException()
+                    }
+                    if (!res.isSuccessful) return@use null
+                    val json = JSONObject(res.body?.string() ?: "")
+                    val mail = parseEmail(json) ?: return@use null
+                    mail to parsePublisherId(json)
+                }
+            }.onFailure {
+                // EmailUnverifiedException is a distinct, user-actionable
+                // result, not a fetch failure — let it propagate to
+                // completeSignIn rather than being folded into the null return.
+                if (it is EmailUnverifiedException) throw it
+                logger.warn("auth.userinfo_failed", mapOf("error" to it.message))
+            }.getOrNull()
+        }
+
+    /**
+     * Re-read /api/v1/me on an existing session. Used to heal an install that
+     * signed in but never received a publisher id — a network failure at that
+     * moment would otherwise leave it permanently unable to earn.
+     */
+    suspend fun refreshAccount() {
+        val accessToken = getAccessToken() ?: return
+        val account = runCatching { fetchAccount(accessToken) }.getOrNull() ?: return
+        email = account.first
+        publisherId = account.second
+        persist()
     }
 
     /**
-     * Fetches the signed-in user's earnings from /api/credits. Returns null on
-     * any failure so the UI keeps its last value rather than showing a wrong one.
+     * Earnings from /api/v1/earnings. Null on any failure, so the UI keeps its
+     * last value rather than showing a wrong one — never a zero.
      */
-    suspend fun fetchCredits(): Credits? = withContext(Dispatchers.IO) {
+    suspend fun fetchEarnings(): Earnings? = withContext(Dispatchers.IO) {
         val accessToken = getAccessToken() ?: return@withContext null
         runCatching {
             http.newCall(
                 Request.Builder()
-                    .url("$baseUrl/api/credits")
+                    .url("$baseUrl/api/v1/earnings")
                     .header("Authorization", "Bearer $accessToken")
                     .build(),
             ).execute().use { res ->
                 if (!res.isSuccessful) return@use null
-                val json = JSONObject(res.body?.string() ?: "")
-                val devices = json.optJSONArray("devices")?.let { arr ->
-                    (0 until arr.length()).map { i ->
-                        val d = arr.getJSONObject(i)
-                        DeviceCredits(d.optString("machine_id"), d.optLong("credits"))
-                    }
-                }.orEmpty()
-                Credits(json.optLong("total_credits"), json.optDouble("dollars", 0.0), devices)
+                parseEarnings(JSONObject(res.body?.string() ?: ""))
             }
-        }.onFailure { logger.warn("auth.credits_failed", mapOf("error" to it.message)) }.getOrNull()
+        }.onFailure { logger.warn("auth.earnings_failed", mapOf("error" to it.message)) }.getOrNull()
     }
 
     /** Dev-only: permits the cleartext Rails endpoints of debug builds. */
@@ -258,11 +303,60 @@ class AuthManager(
     companion object {
         const val CLIENT_ID = "meerkly-android"
 
-        // Must byte-match the redirect_uri seeded for the meerkly-android client
-        // AND the appAuthRedirectScheme manifest placeholder.
-        const val REDIRECT_URI = "com.meerkly.android:/oauth2redirect"
+        // Must byte-match the redirect_uri the dashboard seeds (derived from its
+        // APP_HOST) AND the App Link intent filter in AndroidManifest.xml. It is
+        // an https App Link rather than a private-use scheme because any app on
+        // the device can claim a scheme, and this client skips the consent
+        // screen — see RFC 8252 §8.1.
+        const val REDIRECT_URI = "https://dashboard.meerkly.com/oauth2redirect"
+
+        /** The API's one refusal a user can actually act on. */
+        const val ERROR_EMAIL_UNVERIFIED = "email_verification_required"
 
         private const val KEY_AUTH_STATE = "auth_state"
         private const val KEY_EMAIL = "account_email"
+        private const val KEY_PUBLISHER_ID = "publisher_id"
+
+        // Parsing is in the companion so it can be tested without an Android
+        // Context, an AuthorizationService or a live socket.
+
+        fun parseEmail(json: JSONObject): String? =
+            json.optString("email").takeIf { it.isNotBlank() }
+
+        /**
+         * Blank and absent both become null. optString returns "" for a missing
+         * key, and an empty publisher id would be handed to the SDK as if it
+         * were real.
+         */
+        fun parsePublisherId(json: JSONObject): String? =
+            json.optString("publisher_id").takeIf { it.isNotBlank() }
+
+        fun parseEarnings(json: JSONObject): Earnings {
+            val devices = json.optJSONArray("devices")?.let { arr ->
+                (0 until arr.length()).map { i ->
+                    val d = arr.getJSONObject(i)
+                    DeviceEarnings(
+                        deviceId = d.optString("device_id"),
+                        label = d.optString("label"),
+                        online = d.optBoolean("online", false),
+                        bytes30d = d.optLong("bytes_30d"),
+                        usd30d = d.optDouble("usd_30d", 0.0),
+                        pending = d.optBoolean("pending", false),
+                    )
+                }
+            }.orEmpty()
+            return Earnings(
+                unpaidUsd = json.optDouble("unpaid_usd", 0.0),
+                lifetimeUsd = json.optDouble("lifetime_usd", 0.0),
+                pendingUsd = json.optDouble("pending_usd", 0.0),
+                bytesShared = json.optLong("bytes_shared"),
+                settledBytes = json.optLong("settled_bytes"),
+                usdPerGb = json.optDouble("usd_per_gb", 0.0),
+                minimumPayoutUsd = json.optDouble("minimum_payout_usd", 0.0),
+                canRequestPayout = json.optBoolean("can_request_payout", false),
+                devicesWindowDays = json.optInt("devices_window_days", 30),
+                devices = devices,
+            )
+        }
     }
 }

@@ -74,7 +74,7 @@ fun MeerklyTopBar(auth: AuthStatus.SignedIn, width: WindowWidth) {
                             color = Ink,
                         )
                         Spacer(Modifier.weight(1f))
-                        if (auth.deviceLinked) {
+                        if (auth.publisherId != null) {
                             StatusChip(
                                 text = stringResource(R.string.device_linked),
                                 fg = EmeraldDeep,

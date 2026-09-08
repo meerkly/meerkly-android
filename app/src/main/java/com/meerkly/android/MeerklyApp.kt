@@ -86,7 +86,9 @@ class AppGraph(app: Application) {
         gatewayAddresses = BuildConfig.GATEWAY_URL.takeIf { it.isNotBlank() }?.let { listOf(it) }.orEmpty(),
     )
     val workerPrefs = WorkerPrefs(app)
-    val account = AccountCoordinator(
+    // internal, not public: AccountCoordinator's own visibility is internal
+    // (it takes the internal ProxyController) — see the note there.
+    internal val account = AccountCoordinator(
         authManager, proxyController, logger, scope,
         // Sticky Stop: the coordinator must not resurrect a worker the user
         // turned off (startup heal, sign-in reconnect).
