@@ -84,7 +84,6 @@
 
     <!-- Navigation tabs -->
     <string name="nav_home">Home</string>
-    <string name="nav_activity">Activity</string>
     <string name="nav_devices">Devices</string>
     <string name="nav_settings">Settings</string>
     <!-- Relative timestamps (buckets come from util/RelativeTime) -->
@@ -94,25 +93,6 @@
     <string name="time_yesterday">yesterday</string>
     <string name="time_days">%1$d days ago</string>
     <string name="time_never">hasn\'t connected yet</string>
-
-    <!-- Activity feed -->
-    <string name="activity_since_start">Since the app started</string>
-    <string name="activity_stat_pages">Pages handled</string>
-    <string name="activity_stat_ok">Succeeded</string>
-    <string name="activity_stat_speed">Typical speed</string>
-    <string name="activity_empty_title">Nothing yet</string>
-    <string name="activity_empty_note">When Meerkly fetches a page for the network, it\'ll show up here.</string>
-    <string name="activity_empty_stopped_note">Meerkly is stopped, so it isn\'t fetching anything. Start it in Settings.</string>
-    <string name="activity_select_title">Pick a page</string>
-    <string name="activity_select_hint">Choose anything on the left to see the details.</string>
-    <string name="activity_detail_requested">Requested</string>
-    <string name="activity_detail_final">Ended up at</string>
-    <string name="activity_detail_duration">Took</string>
-    <string name="activity_detail_size">Page size</string>
-    <string name="activity_detail_started">When</string>
-    <string name="activity_detail_error">What went wrong</string>
-    <string name="activity_ok">Fetched</string>
-    <string name="activity_failed">Failed</string>
 
     <!-- Devices (placeholder until the account API describes a device) -->
     <string name="devices_soon_title">Your devices, soon</string>

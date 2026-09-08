@@ -25,11 +25,11 @@ class NavStateTest {
 
     @Test
     fun `back from a compact detail clears the selection, not the tab`() {
-        val nav = NavState(Destination.Activity, activityKey = "123|https://a.test")
+        val nav = NavState(Destination.Devices, deviceKey = "m-1")
         assertTrue(nav.canGoBack(compact))
         assertTrue(nav.back(compact))
-        assertNull(nav.activityKey)
-        assertEquals(Destination.Activity, nav.destination)
+        assertNull(nav.deviceKey)
+        assertEquals(Destination.Devices, nav.destination)
     }
 
     @Test
@@ -50,10 +50,10 @@ class NavStateTest {
     fun `two-pane back skips the selection because both panes are visible`() {
         // Expanded shows list AND detail, so there is no detail screen to pop —
         // back should leave the tab instead of silently clearing the highlight.
-        val nav = NavState(Destination.Activity, activityKey = "123|https://a.test")
+        val nav = NavState(Destination.Devices, deviceKey = "m-1")
         assertTrue(nav.back(expanded))
         assertEquals(Destination.Home, nav.destination)
-        assertEquals("123|https://a.test", nav.activityKey)
+        assertEquals("m-1", nav.deviceKey)
     }
 
     @Test
@@ -68,9 +68,8 @@ class NavStateTest {
 
     @Test
     fun `switching tabs drops selections so a tab is never re-entered mid-detail`() {
-        val nav = NavState(Destination.Activity, activityKey = "k", deviceKey = "m-1")
+        val nav = NavState(Destination.Devices, deviceKey = "m-1")
         nav.go(Destination.Home)
-        assertNull(nav.activityKey)
         assertNull(nav.deviceKey)
     }
 
@@ -83,14 +82,13 @@ class NavStateTest {
     }
 
     @Test
-    fun `saver round-trips destination and both selections`() {
-        val nav = NavState(Destination.Devices, activityKey = "a", deviceKey = "m-9")
+    fun `saver round-trips destination and selection`() {
+        val nav = NavState(Destination.Devices, deviceKey = "m-9")
         val saved = with(NavState.Saver) {
             androidx.compose.runtime.saveable.SaverScope { true }.save(nav)
         }
         val restored = NavState.Saver.restore(saved!!)!!
         assertEquals(Destination.Devices, restored.destination)
-        assertEquals("a", restored.activityKey)
         assertEquals("m-9", restored.deviceKey)
     }
 
@@ -99,5 +97,20 @@ class NavStateTest {
         assertNull(Destination.fromKey(null))
         assertNull(Destination.fromKey("nope"))
         assertEquals(Destination.Devices, Destination.fromKey("devices"))
+    }
+
+    @Test
+    fun `there are three tabs and Activity is not one of them`() {
+        assertEquals(
+            listOf(Destination.Home, Destination.Devices, Destination.Settings),
+            Destination.entries.toList(),
+        )
+    }
+
+    @Test
+    fun `a saved Activity key from 1_x falls back rather than crashing`() {
+        // rememberSaveable restores across an app upgrade, so a 1.x install
+        // reopening on 2.0 hands us a key that no longer exists.
+        assertNull(Destination.fromKey("activity"))
     }
 }

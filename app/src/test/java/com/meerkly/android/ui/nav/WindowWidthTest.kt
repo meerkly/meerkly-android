@@ -21,12 +21,11 @@ class WindowWidthTest {
     fun `a 10-inch tablet in portrait is Medium, so it gets one centred column`() {
         // 800dp. Two panes here would be ~300dp each — worse than one good column.
         assertEquals(WindowWidth.Medium, WindowWidth.of(800f))
-        assertFalse(WindowWidth.Medium.twoPane(Destination.Activity))
+        assertFalse(WindowWidth.Medium.twoPane(Destination.Devices))
     }
 
     @Test
-    fun `two-pane only at Expanded, and only for the list screens`() {
-        assertTrue(WindowWidth.Expanded.twoPane(Destination.Activity))
+    fun `two-pane only at Expanded, and only for Devices`() {
         assertTrue(WindowWidth.Expanded.twoPane(Destination.Devices))
         assertFalse(WindowWidth.Expanded.twoPane(Destination.Home))
         assertFalse(WindowWidth.Expanded.twoPane(Destination.Settings))

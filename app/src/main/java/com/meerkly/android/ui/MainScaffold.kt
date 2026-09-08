@@ -26,7 +26,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import com.meerkly.android.model.AuthStatus
 import com.meerkly.android.ui.components.HomeIcon
-import com.meerkly.android.ui.components.ListIcon
 import com.meerkly.android.ui.components.PhoneIcon
 import com.meerkly.android.ui.components.SlidersIcon
 import com.meerkly.android.ui.nav.Destination
@@ -81,9 +80,7 @@ fun MainScaffold(
     BoxWithConstraints(modifier.fillMaxSize().background(Bone)) {
         val width = WindowWidth.of(maxWidth.value)
 
-        // Only enabled when nothing higher-priority (browser panel, debug
-        // screen) wants back — those are handled in RootScreen with a mutually
-        // exclusive `enabled`, so neither depends on registration order.
+        // Back order: compact detail → non-Home tab → system.
         BackHandler(enabled = backEnabled && nav.canGoBack(width)) { nav.back(width) }
 
         Column(Modifier.fillMaxSize()) {
@@ -99,7 +96,6 @@ fun MainScaffold(
                             auth = auth,
                             width = width,
                         )
-                        Destination.Activity -> ActivityScreen(viewModel, nav, width)
                         Destination.Devices -> DevicesScreen(viewModel, nav, width)
                         Destination.Settings -> SettingsScreen(
                             viewModel = viewModel,
@@ -199,7 +195,6 @@ internal fun MeerklyNavigationRail(current: Destination, onSelect: (Destination)
 @Composable
 private fun TabIcon(destination: Destination) = when (destination) {
     Destination.Home -> HomeIcon()
-    Destination.Activity -> ListIcon()
     Destination.Devices -> PhoneIcon()
     Destination.Settings -> SlidersIcon()
 }

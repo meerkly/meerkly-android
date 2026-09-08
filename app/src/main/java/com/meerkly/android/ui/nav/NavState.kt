@@ -12,7 +12,7 @@ import androidx.compose.runtime.setValue
  * Where we are: the current tab, plus which row is selected on each of the two
  * list screens.
  *
- * Hand-rolled rather than navigation-compose. Four destinations with no
+ * Hand-rolled rather than navigation-compose. Three destinations with no
  * arguments and no deep links don't need a NavHost, and the decider is the
  * single-GeckoViewHost invariant: a NavHost swaps composables per destination,
  * so the host would have to live outside it anyway, while NavHost's own
@@ -27,12 +27,10 @@ import androidx.compose.runtime.setValue
 @Stable
 class NavState(
     destination: Destination = Destination.Home,
-    activityKey: String? = null,
     deviceKey: String? = null,
 ) {
     var destination by mutableStateOf(destination)
         private set
-    var activityKey by mutableStateOf(activityKey)
     var deviceKey by mutableStateOf(deviceKey)
 
     /** The selection the current tab would pop, or null when there's nothing to pop. */
@@ -40,7 +38,6 @@ class NavState(
         // Two-pane: both list and detail are already visible, so there is no
         // "detail screen" to back out of.
         width.twoPane(destination) -> null
-        destination == Destination.Activity -> activityKey
         destination == Destination.Devices -> deviceKey
         else -> null
     }
@@ -51,7 +48,6 @@ class NavState(
     /** True when the event was consumed; false lets the system handle it (exit). */
     fun back(width: WindowWidth): Boolean = when {
         selection(width) != null -> {
-            activityKey = null
             deviceKey = null
             true
         }
@@ -65,7 +61,6 @@ class NavState(
     /** Switching tabs drops any selection, so returning to a tab starts clean. */
     fun go(target: Destination) {
         destination = target
-        activityKey = null
         deviceKey = null
     }
 
@@ -74,12 +69,11 @@ class NavState(
 
     companion object {
         val Saver = listSaver<NavState, Any?>(
-            save = { listOf(it.destination.key, it.activityKey, it.deviceKey) },
+            save = { listOf(it.destination.key, it.deviceKey) },
             restore = {
                 NavState(
                     destination = Destination.fromKey(it[0] as? String) ?: Destination.Home,
-                    activityKey = it[1] as? String,
-                    deviceKey = it[2] as? String,
+                    deviceKey = it[1] as? String,
                 )
             },
         )

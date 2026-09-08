@@ -22,8 +22,7 @@ enum class WindowWidth {
      * panes would be roughly 300dp each, which is worse than one good column.
      */
     fun twoPane(destination: Destination): Boolean =
-        this == Expanded &&
-            (destination == Destination.Activity || destination == Destination.Devices)
+        this == Expanded && destination == Destination.Devices
 
     /** Bottom bar on phones, side rail from 600dp up. */
     val usesRail: Boolean get() = this != Compact
