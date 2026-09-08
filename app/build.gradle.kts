@@ -31,25 +31,24 @@ android {
 
     defaultConfig {
         applicationId = "com.meerkly.android"
-        // GeckoView 152's AAR declares minSdkVersion 26, so 26 (Android 8.0) is the real floor.
+        // The SDK's own floor is 24; 26 (Android 8.0) is kept because it is what
+        // this app has shipped and run on, not because anything requires it.
+        // Dropping to 24 would mean qualifying the foreground service,
+        // notification and Keystore paths on two API levels the app has never run on.
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.1.1"
+        versionCode = 8
+        versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Default: no gateway. The debug build overrides this with a dev URL; a
-        // production URL will be set on release once a prod gateway exists.
+        // Empty means "the production gateway", which is what the SDK resolves an
+        // empty gatewayAddresses list to. A debug build overrides it with a dev
+        // address. This is no longer a WebSocket URL — the SDK takes host:port.
         buildConfigField("String", "GATEWAY_URL", "\"\"")
         // Account portal (OAuth provider + device registration API). Same
         // default/override pattern as GATEWAY_URL.
         buildConfigField("String", "ACCOUNT_BASE_URL", "\"\"")
-
-        // AppAuth's RedirectUriReceiverActivity binds this scheme (manifest merge)
-        // to catch the OAuth redirect com.meerkly.android:/oauth2redirect — must
-        // byte-match the redirect_uri seeded for the meerkly-android client.
-        manifestPlaceholders["appAuthRedirectScheme"] = "com.meerkly.android"
     }
 
     signingConfigs {
@@ -66,24 +65,24 @@ android {
 
     buildTypes {
         debug {
-            // Dev gateway on the host's LAN IP so a physical device on the same
-            // Wi-Fi can reach it (the emulator can reach this IP too). Change this
-            // to match your machine's address if it differs.
-            buildConfigField("String", "GATEWAY_URL", "\"ws://192.168.1.10:8080/v1/connect\"")
+            // A dev gateway on the host's LAN IP, reachable from a physical
+            // device on the same Wi-Fi and from the emulator. host:port, not a
+            // ws:// URL — the SDK speaks QUIC, not WebSocket.
+            buildConfigField("String", "GATEWAY_URL", "\"192.168.1.10:8443\"")
             // Rails dev server on the same host (cleartext allowed for this IP by
             // the debug network_security_config; Rails allows IP-literal hosts).
             buildConfigField("String", "ACCOUNT_BASE_URL", "\"http://192.168.1.10:3000\"")
         }
         release {
-            // Production endpoints — must match @meerkly/sdk's defaults.ts, which
-            // is the cross-platform source of truth for these URLs.
-            buildConfigField("String", "GATEWAY_URL", "\"wss://gateway.meerkly.com/v1/connect\"")
-            buildConfigField("String", "ACCOUNT_BASE_URL", "\"https://account.meerkly.com\"")
+            // Empty on purpose: the SDK's own default is the production gateway,
+            // and duplicating the address here would be a second place to get it
+            // wrong.
+            buildConfigField("String", "GATEWAY_URL", "\"\"")
+            buildConfigField("String", "ACCOUNT_BASE_URL", "\"https://dashboard.meerkly.com\"")
 
-            // R8 stays off. It only shrinks Java/Kotlin bytecode, which is a rounding
-            // error next to GeckoView's native libraries — the actual size win comes
-            // from Play's per-ABI splits in the AAB. Not worth the reflection risk
-            // across GeckoView, AppAuth and the WebExtension bridge for that.
+            // R8 stays off. The SDK's public surface is uniffi-generated bindings
+            // dispatching through JNA reflection, and the size win on an app this
+            // small does not justify that risk.
             optimization {
                 enable = false
             }
@@ -94,8 +93,9 @@ android {
         }
     }
     compileOptions {
-        // GeckoView 152 requires Java 17. With AGP 9 built-in Kotlin, the Kotlin jvmTarget
-        // defaults to targetCompatibility, so this also moves Kotlin bytecode to 17.
+        // Java 17 is the toolchain this project targets. With AGP 9 built-in Kotlin,
+        // the Kotlin jvmTarget defaults to targetCompatibility, so this also moves
+        // Kotlin bytecode to 17.
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
