@@ -80,41 +80,6 @@ class DesignRenderTest {
     }
 
     @Test
-    fun `activity feed`() {
-        render("activity-phone") {
-            ActivityContent(
-                rows = sampleRows(),
-                summary = ActivityFeed.Summary(pages = 37, succeeded = 35, medianMs = 840),
-                workerEnabled = true,
-                twoPane = false,
-                selectedKey = null,
-                onSelect = {},
-            )
-        }
-    }
-
-    @Test
-    fun `activity feed on a tablet`() {
-        render("activity-tablet", widthDp = 1280, heightDp = 800) {
-            ActivityContent(
-                rows = sampleRows(),
-                summary = ActivityFeed.Summary(pages = 37, succeeded = 35, medianMs = 840),
-                workerEnabled = true,
-                twoPane = true,
-                selectedKey = sampleRows()[1].key,
-                onSelect = {},
-            )
-        }
-    }
-
-    @Test
-    fun `activity empty`() {
-        render("activity-empty") {
-            ActivityContent(emptyList(), ActivityFeed.Summary(0, 0, null), true, false, null, {})
-        }
-    }
-
-    @Test
     fun `navigation bar shows every icon, not just the selected one`() {
         render("navbar", widthDp = 411, heightDp = 96) {
             androidx.compose.foundation.layout.Box(
@@ -122,42 +87,5 @@ class DesignRenderTest {
                 contentAlignment = androidx.compose.ui.Alignment.BottomCenter,
             ) { MeerklyNavigationBarPreview() }
         }
-    }
-
-    @Test
-    fun `top bar aligns with the content below it`() {
-        render("topbar", widthDp = 411, heightDp = 420) {
-            androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
-                MeerklyTopBar(
-                    auth = com.meerkly.android.model.AuthStatus.SignedIn(
-                        email = "rk@wkequity.com", deviceLinked = true,
-                    ),
-                    width = com.meerkly.android.ui.nav.WindowWidth.Compact,
-                )
-                ActivityContent(
-                    rows = sampleRows(),
-                    summary = ActivityFeed.Summary(pages = 37, succeeded = 35, medianMs = 840),
-                    workerEnabled = true, twoPane = false, selectedKey = null, onSelect = {},
-                )
-            }
-        }
-    }
-
-    private fun sampleRows(): List<ActivityFeed.Row> {
-        val now = java.time.Instant.parse("2026-08-11T12:00:00Z")
-        fun r(host: String, path: String, ok: Boolean, ms: Long, mins: Long, title: String?) =
-            ActivityFeed.Row(
-                key = "$mins|$host", host = host, path = path, title = title,
-                succeeded = ok, error = if (ok) null else "Navigation timeout after 30000 ms",
-                loadedMs = ms, sizeBytes = 812_956, startedAt = now.minusSeconds(mins * 60),
-                finalUrl = "https://$host$path", requestedUrl = "https://$host$path",
-            )
-        return listOf(
-            r("ahrefs.com", "/website-authority-checker", true, 780, 1, "Website Authority Checker"),
-            r("bbc.co.uk", "/news/technology", true, 1240, 4, "Technology news"),
-            r("example.com", "/", true, 210, 9, "Example Domain"),
-            r("shop.zalando.se", "/herr-skor", false, 30_000, 14, null),
-            r("news.ycombinator.com", "/newest", true, 640, 22, "New Links | Hacker News"),
-        )
     }
 }

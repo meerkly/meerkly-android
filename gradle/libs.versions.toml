@@ -16,6 +16,7 @@ robolectric = "4.13"
 coreTesting = "2.2.0"
 okhttp = "4.12.0"
 appauth = "0.11.1"
+meerklySdk = "0.6.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -40,6 +41,7 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 androidx-arch-core-testing = { group = "androidx.arch.core", name = "core-testing", version.ref = "coreTesting" }
+meerkly-sdk = { group = "com.meerkly", name = "sdk", version.ref = "meerklySdk" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
