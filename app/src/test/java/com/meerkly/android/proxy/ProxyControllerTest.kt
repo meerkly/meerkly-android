@@ -6,11 +6,15 @@ import com.meerkly.sdk.ClientState
 import com.meerkly.sdk.ProxyConfig
 import com.meerkly.sdk.ProxyException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -39,6 +43,38 @@ class ProxyControllerTest {
         }
         override suspend fun stop() { stopped++; state = ClientState.STOPPED }
         override fun destroy() { destroyed++ }
+    }
+
+    /**
+     * A [ProxyHandle] whose [stop] genuinely suspends, so a poll tick has a
+     * real window to run (or fail to be stopped) while shutdown is in
+     * flight. [FakeHandle]'s methods never suspend, which is exactly why
+     * `StandardTestDispatcher` could never exercise the locking in Finding 1.
+     */
+    private class SlowStopHandle(
+        var state: ClientState = ClientState.IDLE,
+    ) : ProxyHandle {
+        var started = 0
+        var stopped = 0
+        var destroyed = 0
+        var config: ProxyConfig? = null
+
+        override fun state() = state
+        override fun clientKey(): String? = "acct:inst"
+        override suspend fun start() {
+            started++
+            state = ClientState.CONNECTED
+        }
+        override suspend fun stop() {
+            delay(STOP_DELAY_MS)
+            stopped++
+            state = ClientState.STOPPED
+        }
+        override fun destroy() { destroyed++ }
+
+        companion object {
+            const val STOP_DELAY_MS = 5_000L
+        }
     }
 
     // AppLogger declares info/warn/error plus recentEntries with no default
@@ -151,6 +187,64 @@ class ProxyControllerTest {
         // A poll still running would overwrite Stopped with the fake's state.
         handle.state = ClientState.CONNECTED
         advanceTimeBy(3_000)
+        assertEquals(ProxyState.Stopped, controller.state.value)
+    }
+
+    /**
+     * Finding 1: `stopPolling()` must cancelAndJoin(), not just cancel(), or
+     * `shutdown()` can destroy the handle — and set Stopped — while a poll
+     * tick is still (or about to be) live. Nothing above catches this,
+     * because [FakeHandle]'s methods never suspend, so `StandardTestDispatcher`
+     * never has to interleave the poll with a shutdown in progress.
+     *
+     * [SlowStopHandle.stop] suspends, which holds `shutdown()` open inside
+     * `lifecycle.withLock` for a while. During that window we advance the
+     * scheduler well past the poll interval — the window in which a
+     * cancel()-only poll job (the pre-fix behavior) is not yet guaranteed to
+     * have stopped, so a tick could still observe the not-yet-destroyed
+     * handle and rewrite `_state` out from under the eventual Stopped value.
+     * A joined poll cannot do this, because `stopPolling()` does not return
+     * until the poll job has actually finished.
+     */
+    @Test
+    fun `shutdown joins the poll before destroying the handle`() = runTest {
+        val handle = SlowStopHandle()
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        val controller = ProxyController(
+            deviceId = "dev_test",
+            deviceName = "Test",
+            appVersion = "2.0.0",
+            logger = logger,
+            publisherId = { "pub_abc" },
+            scope = scope,
+            createHandle = { handle.also { h -> h.config = it } },
+        )
+
+        controller.start()
+        advanceTimeBy(100)
+        assertEquals(ProxyState.Connected, controller.state.value)
+
+        val shutdownJob = launch { controller.shutdown() }
+        // Let shutdown() acquire the lock, request the poll's cancellation
+        // and start c.stop() -- but c.stop() will not resolve yet.
+        runCurrent()
+        assertEquals(0, handle.destroyed)
+        assertEquals(ProxyState.Connected, controller.state.value)
+
+        // While stop() is still suspended, advance well past the poll
+        // interval -- the window a poll tick would need to run again if the
+        // poll were merely cancel()led rather than actually joined.
+        handle.state = ClientState.CONNECTED
+        advanceTimeBy(1_500)
+
+        // Let stop()'s delay elapse and shutdown() run to completion.
+        advanceUntilIdle()
+        shutdownJob.join()
+
+        assertEquals("stop() is called exactly once", 1, handle.stopped)
+        assertEquals("destroy() is called exactly once", 1, handle.destroyed)
+        // The value must be Stopped, and must not have been overwritten by a
+        // stale poll reading taken before the handle was torn down.
         assertEquals(ProxyState.Stopped, controller.state.value)
     }
 

@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -55,8 +56,12 @@ internal class ProxyController(
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
 
-    private var client: ProxyHandle? = null
-    private var pollJob: Job? = null
+    // Volatile: emitState() reads these from the poll job's coroutine, which
+    // may run on a different Dispatchers.Default thread than whichever thread
+    // last wrote them under lifecycle.withLock. Without this, that thread has
+    // no guarantee of ever observing the write.
+    @Volatile private var client: ProxyHandle? = null
+    @Volatile private var pollJob: Job? = null
 
     // start() and stop() suspend, so a synchronized block is wrong: a monitor
     // held across a suspension point blocks the thread the coroutine resumes
@@ -96,9 +101,7 @@ internal class ProxyController(
             created.start()
             logger.info("proxy.connected", mapOf("client_key" to created.clientKey()))
         } catch (e: ProxyException) {
-            // `reason` is the field; uniffi cannot generate a Rust field named
-            // `message` because the Kotlin error already declares one.
-            val reason = (e as? ProxyException.Failed)?.reason ?: e.message
+            val reason = e.reasonText()
             logger.warn("proxy.start_failed", mapOf("error" to reason))
             _lastError.value = reason
             _state.value = ProxyState.Failed
@@ -120,11 +123,25 @@ internal class ProxyController(
             _state.value = ProxyState.Stopped
             return@withLock
         }
+        // Order matters here, and each step depends on the one before it:
+        //  1. stopPolling() cancels AND joins the poll job, so by the time it
+        //     returns no poll tick is in flight anywhere.
+        //  2. Only once that is guaranteed is it safe to c.stop() / c.destroy()
+        //     the handle — a poll tick still running could otherwise call into
+        //     a handle mid-teardown or already destroyed (the SDK throws, and
+        //     an uncaught throw in a launched coroutine is fatal).
+        //  3. client is nulled only after destroy(), so no other lifecycle
+        //     caller can observe a handle that is still half torn down.
+        //  4. _state.value is set to Stopped last, so a poll tick joined in
+        //     step 1 cannot have overwritten it afterwards.
+        // The poll job never acquires `lifecycle` itself, so joining it here
+        // from inside withLock cannot deadlock — do not "simplify" this back
+        // to a bare cancel().
         stopPolling()
         try {
             c.stop()
         } catch (e: ProxyException) {
-            logger.warn("proxy.stop_failed", mapOf("error" to e.message))
+            logger.warn("proxy.stop_failed", mapOf("error" to e.reasonText()))
         } finally {
             c.destroy()
             client = null
@@ -148,8 +165,18 @@ internal class ProxyController(
         }
     }
 
-    private fun stopPolling() {
-        pollJob?.cancel()
+    /**
+     * Cancel the poll AND wait for it to actually stop.
+     *
+     * cancel() alone is cooperative: a tick already in flight on another thread
+     * keeps running, and it holds a reference to the handle we are about to
+     * destroy. Joining is what makes "the poll is stopped" true before
+     * destroy() rather than merely requested — without it the poll can call
+     * into a released handle (the SDK throws, and an uncaught throw in a
+     * launched coroutine is fatal) or overwrite Stopped with a stale reading.
+     */
+    private suspend fun stopPolling() {
+        pollJob?.cancelAndJoin()
         pollJob = null
     }
 
@@ -161,6 +188,16 @@ internal class ProxyController(
             logger.info("proxy.state", mapOf("state" to next.name))
         }
     }
+
+    /**
+     * `reason` is the field; uniffi cannot generate a Rust field named
+     * `message` because the Kotlin error already declares one. Both catch
+     * sites need this same unwrapping — extracted so they cannot drift apart
+     * again (a bare `e.message` on `ProxyException.Failed` renders as the
+     * unhelpful `"reason=<reason>"`).
+     */
+    private fun ProxyException.reasonText(): String? =
+        (this as? ProxyException.Failed)?.reason ?: message
 
     private companion object {
         const val POLL_INTERVAL_MS = 1_000L
