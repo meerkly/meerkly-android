@@ -4,7 +4,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The single eligibility rule every start path (Activity, pairing, boot) shares. */
+/** The single eligibility rule every start path (Activity, sign-in, boot) shares. */
 class WorkerServiceLauncherTest {
 
     @Test

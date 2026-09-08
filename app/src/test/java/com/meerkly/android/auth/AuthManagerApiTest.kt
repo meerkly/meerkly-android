@@ -141,6 +141,48 @@ class AuthManagerApiTest {
         assertTrue(AuthManager.MESSAGE_EMAIL_UNVERIFIED != "Sign-in failed. Please try again.")
     }
 
+    // sessionHostMatches decides whether a restored AuthState is still usable
+    // against this build's configured account host — the load()-time guard
+    // that discards a 1.x session pointed at a retired host instead of
+    // leaving the user permanently signed-in-but-broken.
+
+    @Test
+    fun `a session token endpoint on the configured host matches`() {
+        assertTrue(
+            AuthManager.sessionHostMatches(
+                "https://dashboard.meerkly.com",
+                "https://dashboard.meerkly.com/oauth/token",
+            ),
+        )
+    }
+
+    @Test
+    fun `a session token endpoint on a different host does not match`() {
+        assertEquals(
+            false,
+            AuthManager.sessionHostMatches(
+                "https://dashboard.meerkly.com",
+                "https://account.meerkly.com/oauth/token",
+            ),
+        )
+    }
+
+    @Test
+    fun `a null token endpoint is treated as usable, not evidence of a host change`() {
+        assertTrue(AuthManager.sessionHostMatches("https://dashboard.meerkly.com", null))
+    }
+
+    @Test
+    fun `a session token endpoint on the same host but a different port does not match`() {
+        assertEquals(
+            false,
+            AuthManager.sessionHostMatches(
+                "http://192.168.1.10:3000",
+                "http://192.168.1.10:8443/oauth/token",
+            ),
+        )
+    }
+
     private fun fetch(path: String): String =
         okhttp3.OkHttpClient().newCall(
             okhttp3.Request.Builder().url(server.url(path)).build(),

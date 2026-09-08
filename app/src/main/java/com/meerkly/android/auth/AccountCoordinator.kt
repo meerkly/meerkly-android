@@ -36,6 +36,13 @@ internal class AccountCoordinator(
     // (with the eligibility callback) so this class stays Android-free.
     private val isWorkerEnabled: () -> Boolean = { true },
     private val onWorkerEligible: () -> Unit = {},
+    // Stops the foreground service on sign-out. Injected for the same reason
+    // as onWorkerEligible: this class has no Context to call
+    // WorkerServiceLauncher.stop itself. Deliberately not the same callback
+    // that flips worker_enabled — a signed-out user losing the service is not
+    // the user pressing Stop, and conflating the two would leave earning
+    // disabled after they sign back in.
+    private val onSignedOut: () -> Unit = {},
 ) {
     private val _status = MutableStateFlow<AuthStatus>(AuthStatus.Loading)
     val status: StateFlow<AuthStatus> = _status
@@ -79,13 +86,17 @@ internal class AccountCoordinator(
     }
 
     /**
-     * Sign out. Unlike 1.x this also stops the proxy: the publisher id is both
-     * the credential's payload and the earning identity, so continuing to earn
-     * for an account the user just signed out of would be wrong.
+     * Sign out. Unlike 1.x this also stops the proxy and the foreground
+     * service: the publisher id is both the credential's payload and the
+     * earning identity, so continuing to earn — or leaving the ongoing
+     * notification up — for an account the user just signed out of would be
+     * wrong. Bundled here, not left to the caller, so there is no path that
+     * clears the session without also stopping the service.
      */
     suspend fun signOut() {
         auth.signOut()
         proxy.shutdown()
+        onSignedOut()
         _earnings.value = EarningsState.Unknown
         refreshStatus()
     }
@@ -94,6 +105,22 @@ internal class AccountCoordinator(
     fun refreshEarnings() {
         scope.launch {
             auth.fetchEarnings()?.let { _earnings.value = EarningsState.Loaded(it) }
+        }
+    }
+
+    /**
+     * Re-fetch /api/v1/me for an install that has a session but no id, and
+     * start earning if one arrives. This is the actual fix for "signed in,
+     * still setting up your account" — [refreshEarnings] refetches earnings,
+     * which never touches publisherId at all. Public (unlike [healPublisherId]
+     * before it) so the dashboard's "Try again" banner can drive the same
+     * heal path [onAppStart] uses, instead of a retry that can never resolve
+     * what the banner is showing.
+     */
+    fun retryAccount() {
+        scope.launch {
+            healPublisherId()
+            refreshStatus()
         }
     }
 

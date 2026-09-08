@@ -7,7 +7,7 @@ import com.meerkly.android.AppGraph
 
 /**
  * The single place that decides whether the worker service should run. Every
- * start path funnels through here — MainActivity.onStart, post-pairing,
+ * start path funnels through here — MainActivity.onStart, sign-in completing,
  * BootReceiver — so the eligibility rule can't drift between them:
  * the user hasn't stopped it, and we know which account to earn for.
  */
@@ -71,7 +71,7 @@ object WorkerServiceLauncher {
         publisherId: String?,
     ): Boolean = granted && eligible(workerEnabled, publisherId)
 
-    /** User re-enabled or explicitly stopped from in-app UI. */
+    /** The user pressed Stop from in-app UI, or signed out. */
     fun stop(context: Context) {
         context.applicationContext.stopService(
             Intent(context.applicationContext, WorkerService::class.java),

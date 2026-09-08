@@ -34,6 +34,25 @@ class WorkerServiceTest {
     }
 
     @Test
+    fun `a non-stop start while worker_enabled is false self-stops instead of going foreground`() {
+        app().graph.workerPrefs.workerEnabled = false
+        val controller = Robolectric.buildService(WorkerService::class.java).create()
+        val service = controller.get()
+
+        val mode = service.onStartCommand(Intent(app(), WorkerService::class.java), 0, 1)
+
+        // Every current caller already gates on the pref before starting this
+        // service, so this path is defence in depth — but the class's own
+        // contract is that no start here ever raises the notification for a
+        // worker the user turned off, so a caller that forgot the check must
+        // still not go foreground.
+        assertEquals(Service.START_NOT_STICKY, mode)
+        assertTrue(shadowOf(service).isStoppedBySelf)
+        assertEquals(0, shadowOf(service).lastForegroundNotificationId)
+        controller.destroy()
+    }
+
+    @Test
     fun `notification Stop is the sticky user stop`() {
         app().graph.workerPrefs.workerEnabled = true
         val controller = Robolectric.buildService(WorkerService::class.java).create()

@@ -8,10 +8,11 @@
   * machineId — the gateway keys live worker connections by it
     (dispatch.workers[machineID]). Restoring a backup onto a second device
     would put two live workers on one id and silently orphan one of them.
-  * The device token, encrypted with an AndroidKeyStore key that by design
-    never leaves the device — the restored ciphertext would be undecryptable.
+  * The OAuth session and publisher id, encrypted with an AndroidKeyStore key
+    that by design never leaves the device — the restored ciphertext would be
+    undecryptable.
 
-  A restored install is meant to mint a fresh machineId and re-pair.
+  A restored install is meant to mint a fresh machineId and sign in again.
 -->
 <full-backup-content>
     <exclude domain="sharedpref" path="meerkly_prefs.xml" />

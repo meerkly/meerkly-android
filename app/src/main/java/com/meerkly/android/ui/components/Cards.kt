@@ -35,7 +35,16 @@ internal fun BrandCard(content: @Composable () -> Unit) {
 }
 
 @Composable
-internal fun EarnCard(label: String, value: String, note: String, chip: @Composable () -> Unit) {
+internal fun EarnCard(
+    label: String,
+    value: String,
+    note: String,
+    chip: @Composable () -> Unit,
+    // A second, smaller line under `note` — used to carry the same
+    // "Estimate — not settled yet" wording DevicesScreen shows for a pending
+    // figure, without disturbing the window-label note every other card uses.
+    secondaryNote: String? = null,
+) {
     BrandCard {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             chip()
@@ -55,6 +64,9 @@ internal fun EarnCard(label: String, value: String, note: String, chip: @Composa
                 color = Ink,
             )
             Text(text = note, style = MaterialTheme.typography.bodySmall, color = InkSoft)
+            if (secondaryNote != null) {
+                Text(text = secondaryNote, style = MaterialTheme.typography.labelSmall, color = InkSoft)
+            }
         }
     }
 }

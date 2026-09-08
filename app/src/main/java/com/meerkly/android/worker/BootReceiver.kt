@@ -11,7 +11,7 @@ import com.meerkly.android.MeerklyApp
  * BOOT_COMPLETED is an explicit exemption from background-FGS-start
  * restrictions, and `specialUse` is on the boot-launchable list (Android 15+).
  * Not directBootAware, so this fires after first unlock — which is required
- * anyway: the device token lives behind the AndroidKeyStore.
+ * anyway: the persisted auth session lives behind the AndroidKeyStore.
  *
  * Respects the sticky Stop: [WorkerServiceLauncher.startIfEligible] checks
  * workerEnabled, so a user who stopped the worker stays stopped across

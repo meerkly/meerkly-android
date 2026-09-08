@@ -24,8 +24,8 @@ commits both, and creates the matching tag v<versionName>.
 
   --push    also run `git push --follow-tags`, which starts the Release workflow
 
-The workflow builds signed per-ABI APKs (~100 MB each) and opens a DRAFT
-GitHub release. Install one, check it runs, then press Publish.
+The workflow builds a signed universal APK (~24 MB) and opens a DRAFT
+GitHub release. Install it, check it runs, then press Publish.
 
 You can also start it by hand from the Actions tab ("Release" -> Run workflow)
 for a tag that already exists.

@@ -1,6 +1,7 @@
 package com.meerkly.android.ui
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -11,6 +12,7 @@ import android.provider.Settings
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.meerkly.android.BuildConfig
 import com.meerkly.android.MeerklyApp
 import com.meerkly.android.model.AuthStatus
 import com.meerkly.android.model.EarningsState
@@ -29,8 +31,6 @@ data class MachineInfo(
     val appVersion: String,
     val deviceModel: String,
     val androidSdk: Int,
-    // Literal, not BuildConfig: no field exists for it yet. libs.versions.toml
-    // (meerklySdk) is the source of truth this must be kept in sync with.
     val sdkVersion: String,
 )
 
@@ -38,7 +38,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val graph = (app as MeerklyApp).graph
 
-    // Sign-in + device-link state driving the root UI (gate vs dashboard).
+    // Sign-in + publisher-id state driving the root UI (gate vs dashboard).
     val authStatus: StateFlow<AuthStatus> = graph.account.status
 
     /** Live proxy state, so Home can stop claiming "Connected". */
@@ -108,7 +108,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * A notification-permission dialog came back (from either request site).
      * Refreshes the checklist row AND re-posts the worker's ongoing
      * notification, which stays invisible otherwise: on a fresh install the
-     * service starts at pairing, before this permission exists, and a grant
+     * service starts at sign-in, before this permission exists, and a grant
      * alone re-posts nothing.
      *
      * Reads the real permission state rather than trusting the dialog's result,
@@ -140,7 +140,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * System dialog asking to exempt Meerkly from battery optimizations (Doze
      * suspends the worker's network otherwise). Some OEMs strip the direct
      * dialog — fall back to the settings list.
+     *
+     * Lint flags [Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS] as a
+     * Play Store policy risk (BatteryLife): the policy bars using it to keep
+     * a general-purpose app alive, but explicitly allows apps whose core
+     * function requires it to stay running continuously — which is exactly
+     * this app's exit-node service. The request is also user-initiated from
+     * the setup checklist, not launched automatically at startup.
      */
+    @SuppressLint("BatteryLife")
     fun batteryExemptionIntent(): Intent {
         val direct = Intent(
             Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
@@ -155,6 +163,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Refresh earnings (e.g. when the dashboard is shown). */
     fun refreshEarnings() = graph.account.refreshEarnings()
+
+    /**
+     * Re-fetch the account (publisher id) and start earning if one arrives.
+     * The actual retry for [com.meerkly.android.ui.DashboardScreen]'s
+     * "account not ready" banner — [refreshEarnings] alone can never clear
+     * that state, since it never touches publisherId.
+     */
+    fun retryAccount() = graph.account.retryAccount()
 
     private val _signingIn = MutableStateFlow(false)
     val signingIn: StateFlow<Boolean> = _signingIn.asStateFlow()
@@ -175,7 +191,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _signInError.value = message
     }
 
-    /** Completes the OAuth redirect result: exchange, pair the device, connect the worker. */
+    /** Completes the OAuth redirect result: exchange, fetch the publisher id, connect the worker. */
     fun onSignInResult(data: Intent?) {
         viewModelScope.launch {
             val error = graph.account.completeSignIn(data)
@@ -195,7 +211,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }.getOrDefault("?"),
         deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
         androidSdk = Build.VERSION.SDK_INT,
-        sdkVersion = "0.6.0",
+        sdkVersion = BuildConfig.SDK_VERSION,
     )
 
     /** Builds the diagnostics ZIP off the main thread and returns it for sharing. */

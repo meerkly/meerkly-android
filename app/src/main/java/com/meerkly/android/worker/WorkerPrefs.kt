@@ -10,10 +10,10 @@ import android.content.SharedPreferences
  * per-install, like the machineId next to them).
  *
  * [workerEnabled] is the single switch every start path checks — Activity
- * foreground, post-pairing, boot receiver, STICKY restart. It defaults to true
- * ("always run while paired"); an explicit user Stop flips it false and it
- * stays false until the user turns the worker back on in the app. Nothing else
- * may write it.
+ * foreground, sign-in completing, boot receiver, STICKY restart. It defaults
+ * to true ("always run once signed in"); an explicit user Stop flips it false
+ * and it stays false until the user turns the worker back on in the app.
+ * Nothing else may write it.
  *
  * There is deliberately no "nudge dismissed" flag: the setup checklist hides
  * itself by being completed, not by being dismissed.

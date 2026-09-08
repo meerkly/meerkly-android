@@ -11,7 +11,7 @@ import org.robolectric.annotation.Config
 
 /**
  * Boot receiver gating. Under Robolectric the real MeerklyApp graph exists but
- * the install is unpaired (no device token), so the positive start path is
+ * the install is signed out (no publisher id), so the positive start path is
  * covered by WorkerServiceLauncherTest's pure-rule cases + on-device reboot
  * verification; here we pin the refusals.
  */
@@ -30,7 +30,7 @@ class BootReceiverTest {
     }
 
     @Test
-    fun `unpaired install does not start the service on boot`() {
+    fun `signed-out install does not start the service on boot`() {
         BootReceiver().onReceive(app, Intent(Intent.ACTION_BOOT_COMPLETED))
         assertNull(shadowOf(app).peekNextStartedService())
     }

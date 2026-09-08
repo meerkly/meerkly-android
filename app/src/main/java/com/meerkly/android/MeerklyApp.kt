@@ -30,10 +30,12 @@ class MeerklyApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // GeckoView is multiprocess: its content/GPU/etc. child processes re-instantiate this
-        // Application. Only build the app graph (logger, GeckoRuntime, session) in the main
-        // process — otherwise every Gecko child would spin up a second runtime and interleave
-        // writes to the shared JSONL log.
+        // Nothing in this app declares a second process today, so this guard
+        // is cheap insurance rather than a live requirement: if a future
+        // dependency ever adds one (a WebView renderer process, a
+        // multi-process library), building the app graph — and its shared
+        // JSONL log writer — only in the main process keeps that process from
+        // silently getting a second instance and interleaving writes.
         if (isMainProcess()) {
             graph = AppGraph(this)
         }
@@ -96,6 +98,11 @@ class AppGraph(app: Application) {
         // Sign-in completed in the foreground — a legal moment to raise the
         // foreground service.
         onWorkerEligible = { WorkerServiceLauncher.startIfEligible(app, this) },
+        // A signed-out account has nothing left to earn for; stop the
+        // ongoing notification/exit-node service rather than leaving it
+        // orphaned (and, via a low-memory restart or its own Stop button,
+        // able to disable worker_enabled for the next sign-in).
+        onSignedOut = { WorkerServiceLauncher.stop(app) },
     )
 
     init {

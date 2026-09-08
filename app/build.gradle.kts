@@ -56,9 +56,15 @@ android {
         // empty gatewayAddresses list to. A debug build overrides it with a dev
         // address. This is no longer a WebSocket URL — the SDK takes host:port.
         buildConfigField("String", "GATEWAY_URL", "\"\"")
-        // Account portal (OAuth provider + device registration API). Same
-        // default/override pattern as GATEWAY_URL.
+        // Account portal (OAuth provider + the /api/v1/me publisher-id lookup).
+        // Same default/override pattern as GATEWAY_URL.
         buildConfigField("String", "ACCOUNT_BASE_URL", "\"\"")
+        // Read from the version catalog rather than duplicated as a literal, so
+        // the Settings/diagnostics display can't drift from the dependency
+        // actually on the classpath (libs.versions.toml is the source of
+        // truth). Resolved once at configuration time, so this stays
+        // configuration-cache compatible.
+        buildConfigField("String", "SDK_VERSION", "\"${libs.versions.meerklySdk.get()}\"")
     }
 
     signingConfigs {
@@ -82,6 +88,13 @@ android {
             // Rails dev server on the same host (cleartext allowed for this IP by
             // the debug network_security_config; Rails allows IP-literal hosts).
             buildConfigField("String", "ACCOUNT_BASE_URL", "\"http://192.168.1.10:3000\"")
+            // Must byte-match both the dev Doorkeeper's seeded redirect_uri
+            // (derived from that server's own APP_HOST) and the plain intent
+            // filter debug/AndroidManifest.xml registers for it. A
+            // debug-keystore build can never have verified an https App Link,
+            // so this stays the dev server's plain http URL — not the
+            // release value below.
+            buildConfigField("String", "OAUTH_REDIRECT_URI", "\"http://192.168.1.10:3000/oauth2redirect\"")
         }
         release {
             // Empty on purpose: the SDK's own default is the production gateway,
@@ -89,6 +102,11 @@ android {
             // wrong.
             buildConfigField("String", "GATEWAY_URL", "\"\"")
             buildConfigField("String", "ACCOUNT_BASE_URL", "\"https://dashboard.meerkly.com\"")
+            // Must byte-match both the redirect_uri the dashboard seeds
+            // (derived from its own APP_HOST) and the verified App Link intent
+            // filter in the release manifest. Do not change this without
+            // updating both of those in lockstep.
+            buildConfigField("String", "OAUTH_REDIRECT_URI", "\"https://dashboard.meerkly.com/oauth2redirect\"")
 
             // R8 stays off. The SDK's public surface is uniffi-generated bindings
             // dispatching through JNA reflection, and the size win on an app this

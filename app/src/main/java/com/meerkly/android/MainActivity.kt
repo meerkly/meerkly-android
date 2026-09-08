@@ -17,13 +17,13 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val EXTRA_SCREEN = "meerkly.screen"
-        const val EXTRA_DEMO = "meerkly.demo"
     }
 
     override fun onStart() {
         super.onStart()
         // App is foregrounded — the always-legal moment to (re)raise the worker
-        // service. No-ops unless enabled + paired (WorkerServiceLauncher).
+        // service. No-ops unless enabled + signed in with a publisher id
+        // (WorkerServiceLauncher).
         WorkerServiceLauncher.startIfEligible(this, (application as MeerklyApp).graph)
     }
 

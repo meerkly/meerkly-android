@@ -15,7 +15,7 @@ class WorkerPrefsTest {
     private fun prefs() = WorkerPrefs(RuntimeEnvironment.getApplication())
 
     @Test
-    fun `worker is enabled by default - always run while paired`() {
+    fun `worker is enabled by default - always run once signed in`() {
         assertTrue(prefs().workerEnabled)
     }
 

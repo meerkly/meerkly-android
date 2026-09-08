@@ -37,7 +37,7 @@ import kotlinx.coroutines.launch
  *    reconnects the proxy first, we just re-post the notification.
  *  - [ACTION_STOP] (notification action) is the user's explicit Stop: persist
  *    workerEnabled=false, stop the proxy, stopSelf — sticky restart defeated,
- *    and every auto-start path (Activity, boot, pairing) checks the pref.
+ *    and every auto-start path (Activity, boot, sign-in) checks the pref.
  *  - onTaskRemoved: intentionally nothing — swiping the app away must not stop
  *    earning.
  *  - onDestroy never touches the proxy: the process legitimately outlives
@@ -57,6 +57,19 @@ class WorkerService : Service() {
             graph.workerPrefs.workerEnabled = false
             graph.proxyController.stop()
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        // Defence in depth, not a known-reachable path: every current caller
+        // (WorkerServiceLauncher.startIfEligible, the STICKY restart's own
+        // re-delivery) already gates on workerEnabled before starting this
+        // service. But this class's own contract above promises every
+        // auto-start path checks the pref, and nothing enforced that here —
+        // so a future caller that forgets the check would otherwise raise a
+        // foreground notification for a worker the user turned off.
+        if (!graph.workerPrefs.workerEnabled) {
+            graph.logger.warn("worker.start_rejected_disabled")
             stopSelf()
             return START_NOT_STICKY
         }

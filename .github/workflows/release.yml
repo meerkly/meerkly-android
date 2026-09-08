@@ -5,7 +5,7 @@ name: Release
 #   scripts/release.sh 1.1        # bumps versionName/versionCode, commits, tags v1.1
 #   git push --follow-tags
 #
-# That builds signed per-ABI APKs and opens a DRAFT release. Download one,
+# That builds a signed universal APK and opens a DRAFT release. Download it,
 # install it on a real phone, check it runs — then press Publish. That press is
 # what makes it "latest".
 #
@@ -92,26 +92,7 @@ jobs:
             exit 1
           fi
 
-      # FetchFrameConformanceTest binds this worker to the canonical wire spec
-      # that also governs the gateway and the desktop/headless workers. It lives
-      # in the private api-gateway repo, which this public repo's GITHUB_TOKEN
-      # cannot read — hence a dedicated read-only token. Only spec/ is fetched,
-      # and nothing here is ever uploaded (artifacts come from dist/ alone).
-      - name: Check out the canonical protocol spec
-        uses: actions/checkout@v4
-        with:
-          repository: meerkly/api-gateway
-          token: ${{ secrets.SPEC_REPO_TOKEN }}
-          # Must be a relative path under the workspace; checkout rejects
-          # anything outside it.
-          path: spec-repo
-          sparse-checkout: spec
-
       - name: Tests and lint
-        # Without SPEC_DIR the conformance test fails rather than silently
-        # skipping — protocol drift must not be shippable.
-        env:
-          SPEC_DIR: ${{ github.workspace }}/spec-repo/spec
         run: ./gradlew testDebugUnitTest lintDebug
 
       - name: Decode keystore
@@ -130,7 +111,7 @@ jobs:
           MEERKLY_KEYSTORE_PASSWORD: ${{ secrets.MEERKLY_KEYSTORE_PASSWORD }}
           MEERKLY_KEY_ALIAS: ${{ secrets.MEERKLY_KEY_ALIAS }}
           MEERKLY_KEY_PASSWORD: ${{ secrets.MEERKLY_KEY_PASSWORD }}
-        run: ./gradlew assembleRelease -PabiSplits
+        run: ./gradlew assembleRelease
 
       - name: Refuse to ship anything unsigned
         shell: bash
@@ -144,23 +125,21 @@ jobs:
             exit 1
           fi
 
-      - name: Name the APKs for humans
+      - name: Name the APK for humans
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
-          for apk in app/build/outputs/apk/release/*.apk; do
-            # app-arm64-v8a-release.apk -> meerkly-arm64-v8a.apk
-            #
-            # Deliberately version-LESS. GitHub's
-            # /releases/latest/download/<name> redirect resolves to the newest
-            # release only if the filename is stable, and that URL is what the
-            # download buttons on the sites point at — a versioned name would
-            # 404 them on every release. The version lives in the release title
-            # and tag.
-            abi=$(basename "$apk" | sed -E 's/^app-(.*)-release\.apk$/\1/')
-            cp "$apk" "dist/meerkly-${abi}.apk"
-          done
+          # Single universal APK (no more per-ABI splits — GeckoView is gone
+          # and the app is ~24 MB, so one APK for every device is fine).
+          #
+          # Deliberately version-LESS. GitHub's
+          # /releases/latest/download/<name> redirect resolves to the newest
+          # release only if the filename is stable, and that URL is what the
+          # download buttons on the sites point at — a versioned name would
+          # 404 them on every release. The version lives in the release title
+          # and tag.
+          cp app/build/outputs/apk/release/app-release.apk dist/meerkly-universal.apk
           ls -lh dist
 
       - uses: actions/upload-artifact@v4
@@ -170,10 +149,9 @@ jobs:
           if-no-files-found: error
           path: dist/*.apk
 
-      # The Play upload artifact. Deliberately NOT -PabiSplits: that flag is the
-      # direct-download path (per-ABI APKs with compressed native libs, to cut
-      # what someone pulls over mobile data). A bundle splits itself, and Play
-      # wants the modern uncompressed-and-aligned layout.
+      # The Play upload artifact. A bundle splits itself per-device at install
+      # time and Play wants the modern uncompressed-and-aligned layout, so this
+      # is built separately from the universal APK above rather than reusing it.
       - name: Bundle for Play
         env:
           MEERKLY_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
@@ -261,9 +239,8 @@ jobs:
           {
             echo "### Draft release $VERSION is ready :package:"
             echo ""
-            echo "Grab **meerkly-*-arm64-v8a.apk** for any phone from the last several years"
-            echo "(\`armeabi-v7a\` for older 32-bit devices, \`x86_64\` for emulators),"
-            echo "install it on a real device and check it runs — then **Publish release**."
+            echo "Grab **meerkly-universal.apk**, install it on a real device and"
+            echo "check it runs — then **Publish release**."
             echo ""
             echo "https://github.com/${{ github.repository }}/releases"
           } >> "$GITHUB_STEP_SUMMARY"

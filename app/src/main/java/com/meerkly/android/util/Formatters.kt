@@ -38,7 +38,7 @@ object Formatters {
         else -> String.format(locale, "%.2f GB", bytes / 1_000_000_000.0)
     }
 
-    /** "820 ms" / "3.4 s" — how long a crawl took. */
+    /** "820 ms" / "3.4 s" — how long an operation took. */
     fun duration(millis: Long, locale: Locale = Locale.getDefault()): String =
         if (millis < 1_000) String.format(locale, "%d ms", millis)
         else String.format(locale, "%.1f s", millis / 1_000.0)

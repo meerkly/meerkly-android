@@ -1,6 +1,7 @@
 package com.meerkly.android.ui
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -56,6 +57,10 @@ import kotlinx.coroutines.launch
  * real user for a bundle), and the device facts this app has always gathered
  * and never shown.
  */
+// See DashboardScreen's identical suppression: POST_NOTIFICATIONS is API 33+,
+// but referencing the constant is safe on minSdk 26, and every read of it here
+// is already SDK-gated in effect.
+@SuppressLint("InlinedApi")
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,

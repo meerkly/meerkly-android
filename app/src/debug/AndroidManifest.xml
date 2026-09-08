@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Debug overlay: points the app at the debug network-security-config that
-     permits cleartext ws:// to the local gateway. Merged only into debug builds. -->
+     permits cleartext traffic to the local gateway and Rails dev server.
+     Merged only into debug builds. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -12,7 +13,12 @@
             android:name="net.openid.appauth.RedirectUriReceiverActivity"
             android:exported="true"
             tools:node="merge">
-            <intent-filter>
+            <!-- autoVerify explicitly false: this points at a private dev IP
+                 over http, so Android could never verify it as an App Link
+                 (no HTTPS, no assetlinks.json) — this is a plain intent
+                 filter for local redirect handling, not a Play-time App Link
+                 like the release one in the main manifest. -->
+            <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />

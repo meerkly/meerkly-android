@@ -3,6 +3,7 @@ package com.meerkly.android.auth
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.meerkly.android.BuildConfig
 import com.meerkly.android.data.SecureStore
 import com.meerkly.android.logging.AppLogger
 import com.meerkly.android.model.DeviceEarnings
@@ -94,6 +95,27 @@ class AuthManager(
         runCatching {
             authState = AuthState.jsonDeserialize(raw)
             if (authState.isAuthorized) {
+                // A session minted against a different account host (e.g. a
+                // 1.x install's account.meerkly.com session surviving an
+                // update to a build whose ACCOUNT_BASE_URL is
+                // dashboard.meerkly.com) cannot be refreshed or used: AppAuth
+                // serializes the token endpoint into the AuthState itself, so
+                // refresh keeps targeting the old host regardless of what
+                // this build is configured with. isSignedIn would report
+                // true forever with no working publisherId and no way to
+                // heal, so discard it here and drop back to the sign-in
+                // gate — a working sign-in screen is strictly better than a
+                // signed-in screen that can never finish.
+                val sessionTokenEndpoint =
+                    authState.authorizationServiceConfiguration?.tokenEndpoint?.toString()
+                if (!sessionHostMatches(baseUrl, sessionTokenEndpoint)) {
+                    logger.warn(
+                        "auth.session_discarded_host_changed",
+                        mapOf("configuredHost" to baseUrl, "sessionTokenEndpoint" to sessionTokenEndpoint),
+                    )
+                    clearSession()
+                    return@runCatching
+                }
                 email = store.get(KEY_EMAIL)
                 publisherId = store.get(KEY_PUBLISHER_ID)
             }
@@ -108,7 +130,7 @@ class AuthManager(
             serviceConfig,
             CLIENT_ID,
             ResponseTypeValues.CODE,
-            Uri.parse(REDIRECT_URI),
+            Uri.parse(BuildConfig.OAUTH_REDIRECT_URI),
         ).setScopes("public").build() // PKCE (S256) + state are automatic
         return authService.getAuthorizationRequestIntent(request)
     }
@@ -303,12 +325,16 @@ class AuthManager(
     companion object {
         const val CLIENT_ID = "meerkly-android"
 
-        // Must byte-match the redirect_uri the dashboard seeds (derived from its
-        // APP_HOST) AND the App Link intent filter in AndroidManifest.xml. It is
-        // an https App Link rather than a private-use scheme because any app on
-        // the device can claim a scheme, and this client skips the consent
-        // screen — see RFC 8252 §8.1.
-        const val REDIRECT_URI = "https://dashboard.meerkly.com/oauth2redirect"
+        // The redirect URI is BuildConfig.OAUTH_REDIRECT_URI (set per build
+        // type in app/build.gradle.kts), not a constant here, because it must
+        // byte-match two things that are themselves build-type specific: the
+        // server's seeded redirect_uri (derived from that server's own
+        // APP_HOST) and the intent filter for that build type in
+        // AndroidManifest.xml — release's verified https App Link, debug's
+        // plain filter for the dev server. It is an App Link rather than a
+        // private-use scheme because any app on the device can claim a
+        // scheme, and this client skips the consent screen — see RFC 8252
+        // §8.1.
 
         /** The API's one refusal a user can actually act on. */
         const val ERROR_EMAIL_UNVERIFIED = "email_verification_required"
@@ -340,6 +366,29 @@ class AuthManager(
         fun isEmailUnverified(code: Int, body: String?): Boolean =
             code == 403 &&
                 runCatching { JSONObject(body ?: "").optString("error") }.getOrNull() == ERROR_EMAIL_UNVERIFIED
+
+        /**
+         * Is a restored session's token endpoint still usable against the
+         * account host this build is configured for?
+         *
+         * AppAuth serializes the authorization-service configuration (and so
+         * the token endpoint) into the persisted AuthState itself, so a
+         * session minted against one host cannot be refreshed against
+         * another — the host has to match, not just be reachable. A null
+         * endpoint is not evidence of a host change (e.g. a legacy or
+         * partially-formed AuthState), so it is treated as usable rather than
+         * discarded. Pulled out as a pure function, comparing plain strings
+         * via java.net.URI, so this can be tested without an AppAuth
+         * AuthorizationService or an android.net.Uri needing Robolectric.
+         */
+        fun sessionHostMatches(configuredBaseUrl: String, sessionTokenEndpoint: String?): Boolean {
+            if (sessionTokenEndpoint == null) return true
+            return runCatching {
+                val configured = java.net.URI(configuredBaseUrl)
+                val session = java.net.URI(sessionTokenEndpoint)
+                configured.host == session.host && configured.port == session.port
+            }.getOrDefault(false)
+        }
 
         fun parseEmail(json: JSONObject): String? =
             json.optString("email").takeIf { it.isNotBlank() }

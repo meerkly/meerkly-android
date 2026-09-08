@@ -13,7 +13,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Small encrypted key/value store for secrets (OAuth state, device token) — the
+ * Small encrypted key/value store for secrets (OAuth state, publisher id) — the
  * Android counterpart of the desktop's Electron safeStorage persistence.
  * Values are AES-256/GCM encrypted with a key that lives in AndroidKeyStore
  * (non-exportable), and the `base64(iv):base64(ciphertext)` blob sits in the

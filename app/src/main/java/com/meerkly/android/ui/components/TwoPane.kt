@@ -17,8 +17,8 @@ import com.meerkly.android.ui.theme.Sand
  *
  * Hand-rolled rather than `ListDetailPaneScaffold`: that lives in a separate
  * Maven group with its own BOM and ships its own back-navigation model, which
- * would compete with this app's BackHandler chain (browser panel → debug
- * screen → detail → tab → system). Two weights in a Row is the whole feature.
+ * would compete with this app's own BackHandler (detail → tab → system). Two
+ * weights in a Row is the whole feature.
  */
 @Composable
 internal fun TwoPane(

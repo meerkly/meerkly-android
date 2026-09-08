@@ -2,8 +2,8 @@
 <!--
   Backup / device-transfer rules for API 31+. See backup_rules.xml for <= 30.
   `meerkly_prefs` is excluded from BOTH paths — see backup_rules.xml for why
-  (machineId must be unique per live worker; the device token is sealed to a
-  non-exportable AndroidKeyStore key).
+  (machineId must be unique per live worker; the OAuth session and publisher
+  id are sealed to a non-exportable AndroidKeyStore key).
 -->
 <data-extraction-rules>
     <cloud-backup>

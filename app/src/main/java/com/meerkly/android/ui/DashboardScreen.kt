@@ -1,5 +1,6 @@
 package com.meerkly.android.ui
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -74,6 +75,12 @@ import com.meerkly.android.ui.theme.RoseSoft
 import com.meerkly.android.ui.theme.Sand
 
 /** The friendly signed-in home: hero, earnings, reassurance cards. */
+// POST_NOTIFICATIONS is API 33+; referencing the constant on a minSdk-26 app
+// is safe (it is just a string), and every read of it below is already
+// SDK-gated in effect (checkSelfPermission/shouldShowRequestPermissionRationale
+// return sane values pre-33, and MainViewModel.refreshNotificationsGranted
+// short-circuits below SetupChecklist.NOTIFICATION_PERMISSION_SDK).
+@SuppressLint("InlinedApi")
 @Composable
 fun DashboardScreen(
     viewModel: MainViewModel,
@@ -134,7 +141,7 @@ fun DashboardScreen(
         ContentColumn(maxWidth = width.contentMaxWidthDp.dp) {
             Hero(proxyState, proxyError, workerEnabled)
             if (!accountReady) {
-                AccountNotReadyBanner(onRetry = viewModel::refreshEarnings)
+                AccountNotReadyBanner(onRetry = viewModel::retryAccount)
             }
             if (loaded == null) {
                 EarningsUnavailableBanner()
@@ -168,6 +175,15 @@ fun DashboardScreen(
                 note = loaded?.let { stringResource(R.string.days_window, it.devicesWindowDays) }
                     ?: stringResource(R.string.earn_unknown_note),
                 chip = { IconChip(listOf(Pink, PinkDeep)) { PhoneIcon() } },
+                // Same "not settled yet" wording DevicesScreen shows for a
+                // pending row — this figure lags the server's settlement the
+                // same way, and presenting it as a plain total right above
+                // Total earned would read as a contradiction.
+                secondaryNote = if (thisDevice?.pending == true) {
+                    stringResource(R.string.devices_pending_note)
+                } else {
+                    null
+                },
             )
             EarnCard(
                 label = stringResource(R.string.earn_total_label),
