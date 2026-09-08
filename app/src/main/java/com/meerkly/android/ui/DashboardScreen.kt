@@ -122,7 +122,7 @@ fun DashboardScreen(
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        viewModel.refreshNotificationsGranted()
+        viewModel.onNotificationsPermissionResult()
         if (!granted && activity != null) {
             notificationsPermanentlyDenied = !ActivityCompat
                 .shouldShowRequestPermissionRationale(activity, Manifest.permission.POST_NOTIFICATIONS)

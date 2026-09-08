@@ -109,6 +109,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _batteryExempt.value = pm?.isIgnoringBatteryOptimizations(app.packageName) ?: true
     }
 
+    /**
+     * A notification-permission dialog came back (from either request site).
+     * Refreshes the checklist row AND re-posts the worker's ongoing
+     * notification, which stays invisible otherwise: on a fresh install the
+     * service starts at pairing, before this permission exists, and a grant
+     * alone re-posts nothing.
+     *
+     * Reads the real permission state rather than trusting the dialog's result,
+     * so "already granted" and "granted just now" behave identically.
+     */
+    fun onNotificationsPermissionResult() {
+        refreshNotificationsGranted()
+        WorkerServiceLauncher.onNotificationPermissionResult(
+            getApplication(),
+            graph,
+            _notificationsGranted.value,
+        )
+    }
+
     fun refreshNotificationsGranted() {
         val app = getApplication<Application>()
         _notificationsGranted.value =
