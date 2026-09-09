@@ -205,14 +205,19 @@ jobs:
       # than a crawl worker serving fetch jobs, and Play reads that string. That
       # is the documented catch-22 in CLAUDE.md: the form appears only after the
       # upload is blocked. It is the normal path, not a failure.
-      - name: Publish to Play (open testing)
+      - name: Publish to Play (open testing / beta track)
         if: env.PLAY_JSON != ''
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ env.PLAY_JSON }}
           packageName: com.meerkly.android
           releaseFiles: app/build/outputs/bundle/release/app-release.aab
-          track: open
+          # "beta" IS Open testing. The Play Publishing API's track names predate
+          # the Console's current labels and do not match them: internal =
+          # Internal testing, alpha = Closed testing, beta = Open testing,
+          # production = Production. Passing "open" fails with
+          # `Track(s) "open" could not be found`.
+          track: beta
           status: completed
 
       - name: Note when the Play upload was skipped
