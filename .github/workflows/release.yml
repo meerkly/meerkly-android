@@ -34,7 +34,7 @@ concurrency:
 jobs:
   verify:
     name: Verify tag
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     outputs:
       version: ${{ steps.check.outputs.version }}
       versionName: ${{ steps.check.outputs.versionName }}
@@ -62,7 +62,7 @@ jobs:
   build:
     name: Build signed APKs
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     env:
       # Lifted to the job env because `secrets` is not usable in a step-level
       # `if:` — this is what lets the Play upload skip cleanly when unset.
@@ -77,6 +77,17 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+
+      # GitHub's hosted images ship the Android SDK; the self-hosted runner
+      # image deliberately does not — it installs only sudo and a handful of
+      # CLI tools, and baking a full SDK into it would inflate every job that
+      # never touches Android. So the SDK is installed per run, here, which is
+      # what release-sdks.yml's android-build already does.
+      #
+      # Without it the Gradle build fails looking for platform 36 with no
+      # ANDROID_HOME, which reads as a broken build rather than a missing
+      # toolchain.
+      - uses: android-actions/setup-android@v3
 
       - uses: gradle/actions/setup-gradle@v4
 
@@ -196,7 +207,7 @@ jobs:
   release:
     name: Draft release
     needs: [verify, build]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
