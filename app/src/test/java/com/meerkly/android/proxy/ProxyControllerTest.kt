@@ -262,6 +262,51 @@ class ProxyControllerTest {
         assertEquals(ProxyState.Stopped, controller.state.value)
     }
 
+    /**
+     * The reason this exists: a QUIC connection survives its device changing
+     * network, so the gateway keeps serving traffic from an address nothing
+     * re-reports. Forcing a fresh handshake is what makes the new network
+     * visible from the client side.
+     */
+    @Test
+    fun `restart tears the client down and brings it back`() = runTest {
+        val handle = FakeHandle()
+        val controller = controller(handle, scope = TestScope(StandardTestDispatcher(testScheduler)))
+
+        controller.start()
+        advanceTimeBy(100)
+        assertEquals(ProxyState.Connected, controller.state.value)
+
+        controller.restart()
+        advanceTimeBy(100)
+
+        assertEquals("the old client is stopped", 1, handle.stopped)
+        assertEquals("and released", 1, handle.destroyed)
+        assertEquals("before a new one is started", 2, handle.started)
+        assertEquals(ProxyState.Connected, controller.state.value)
+
+        controller.shutdown()
+    }
+
+    /**
+     * A network change arrives whether or not the user is earning. Reconnecting
+     * on one would start a worker they switched off, from a broadcast they
+     * never asked for.
+     */
+    @Test
+    fun `restart on a stopped controller stays stopped`() = runTest {
+        val handle = FakeHandle()
+        val controller = controller(handle, scope = TestScope(StandardTestDispatcher(testScheduler)))
+
+        controller.restart()
+        advanceTimeBy(100)
+
+        assertEquals(0, handle.started)
+        assertEquals(0, handle.stopped)
+        assertEquals(0, handle.destroyed)
+        assertEquals(ProxyState.Disconnected, controller.state.value)
+    }
+
     @Test
     fun `shutdown on a controller that never started is not an error`() = runTest {
         val handle = FakeHandle()

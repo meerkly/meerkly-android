@@ -74,24 +74,50 @@ internal class ProxyController(
         scope.launch { startNow() }
     }
 
-    private suspend fun startNow() = lifecycle.withLock {
-        if (client != null) return@withLock
+    private suspend fun startNow() = lifecycle.withLock { startLocked() }
+
+    /**
+     * The body of [startNow], with the lifecycle lock assumed held.
+     *
+     * Split out for [restartNow], which has to stop and start as one
+     * indivisible step: `Mutex` is not reentrant, so a restart that called the
+     * locking versions would deadlock, and one that took the lock twice would
+     * leave a window where a concurrent [start] observes a controller with no
+     * client and builds a second one.
+     */
+    private suspend fun startLocked() {
+        if (client != null) return
         val id = publisherId()
         if (id.isNullOrBlank()) {
             logger.info("proxy.start_deferred", mapOf("reason" to "no publisher id"))
-            return@withLock
+            return
         }
 
-        val created = createHandle(
-            ProxyConfig(
-                publisherId = id,
-                gatewayAddresses = gatewayAddresses,
-                deviceId = deviceId,
-                deviceName = deviceName,
-                sdk = "kotlin",
-                app = "meerkly-android/$appVersion",
-            ),
-        )
+        // Inside the try, not before it. ProxyClient's constructor validates the
+        // config and THROWS — an empty gatewayAddresses list is rejected there,
+        // not at start(). Building the handle outside this block let that escape
+        // as an uncaught exception in a launched coroutine, which kills the
+        // process: the app crashed on the first sign-in rather than showing a
+        // failure. A config error the user could act on must reach the UI as
+        // Failed, never as a crash.
+        val created = try {
+            createHandle(
+                ProxyConfig(
+                    publisherId = id,
+                    gatewayAddresses = gatewayAddresses,
+                    deviceId = deviceId,
+                    deviceName = deviceName,
+                    sdk = "kotlin",
+                    app = "meerkly-android/$appVersion",
+                ),
+            )
+        } catch (e: ProxyException) {
+            val reason = e.reasonText()
+            logger.warn("proxy.config_rejected", mapOf("error" to reason))
+            _lastError.value = reason
+            _state.value = ProxyState.Failed
+            return
+        }
         client = created
         _lastError.value = null
         _state.value = ProxyState.Connecting
@@ -108,7 +134,7 @@ internal class ProxyController(
             stopPolling()
             created.destroy()
             client = null
-            return@withLock
+            return
         }
         emitState()
     }
@@ -118,10 +144,13 @@ internal class ProxyController(
         scope.launch { shutdown() }
     }
 
-    suspend fun shutdown() = lifecycle.withLock {
+    suspend fun shutdown() = lifecycle.withLock { shutdownLocked() }
+
+    /** The body of [shutdown], with the lifecycle lock assumed held. */
+    private suspend fun shutdownLocked() {
         val c = client ?: run {
             _state.value = ProxyState.Stopped
-            return@withLock
+            return
         }
         // Order matters here, and each step depends on the one before it:
         //  1. stopPolling() cancels AND joins the poll job, so by the time it
@@ -148,6 +177,33 @@ internal class ProxyController(
             _state.value = ProxyState.Stopped
             logger.info("proxy.stopped")
         }
+    }
+
+    /**
+     * Drop the connection and make a fresh one.
+     *
+     * A QUIC connection survives its device changing network: the tunnel
+     * migrates onto the new path and keeps carrying traffic, so no handshake
+     * happens and nothing re-reports where this device now leaves from. A
+     * reconnect is how the client forces that to be re-established.
+     *
+     * A no-op when nothing is running, which is what keeps a network broadcast
+     * from starting a worker the user switched off. Stop and start are one
+     * locked step, so a restart racing a [start] cannot leave two clients
+     * behind.
+     */
+    fun restart() {
+        scope.launch { restartNow() }
+    }
+
+    suspend fun restartNow() = lifecycle.withLock {
+        if (client == null) {
+            logger.info("proxy.restart_skipped", mapOf("reason" to "not running"))
+            return@withLock
+        }
+        logger.info("proxy.restarting")
+        shutdownLocked()
+        startLocked()
     }
 
     /**

@@ -13,12 +13,16 @@ import com.meerkly.android.diagnostics.DiagnosticsExporter
 import com.meerkly.android.logging.AppLogger
 import com.meerkly.android.logging.JsonlFileLogger
 import com.meerkly.android.logging.LogRetention
+import com.meerkly.android.net.DefaultNetworkWatcher
+import com.meerkly.android.net.NetworkChangeMonitor
 import com.meerkly.android.proxy.ProxyController
+import com.meerkly.android.proxy.ProxyState
 import com.meerkly.android.worker.WorkerPrefs
 import com.meerkly.android.worker.WorkerServiceLauncher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -85,6 +89,15 @@ class AppGraph(app: Application) {
         gatewayAddresses = BuildConfig.GATEWAY_URL.takeIf { it.isNotBlank() }?.let { listOf(it) }.orEmpty(),
     )
     val workerPrefs = WorkerPrefs(app)
+
+    // Watching for a change of network, and reconnecting when the device has
+    // settled on a new one. See RECONNECT_ON_NETWORK_CHANGE in build.gradle.kts
+    // for why this is a switch and not the only defence.
+    private val networkWatcher = DefaultNetworkWatcher(
+        context = app,
+        logger = logger,
+        monitor = NetworkChangeMonitor(scope = scope) { proxyController.restart() },
+    )
     // internal, not public: AccountCoordinator's own visibility is internal
     // (it takes the internal ProxyController) — see the note there.
     internal val account = AccountCoordinator(
@@ -109,5 +122,21 @@ class AppGraph(app: Application) {
             mapOf("machine_id" to machineId, "sdk" to Build.VERSION.SDK_INT, "app" to appVersion),
         )
         account.onAppStart()
+
+        // Registered only while there is a connection to reconnect, so a device
+        // whose worker is off is not woken for every network change. The
+        // monitor outlives the registration, which is what stops a restart's
+        // own stop-and-start from looking like a network change and reconnecting
+        // again: it still remembers the network it last saw.
+        if (BuildConfig.RECONNECT_ON_NETWORK_CHANGE) {
+            scope.launch {
+                proxyController.state.collect { state ->
+                    when (state) {
+                        ProxyState.Connecting, ProxyState.Connected -> networkWatcher.start()
+                        else -> networkWatcher.stop()
+                    }
+                }
+            }
+        }
     }
 }

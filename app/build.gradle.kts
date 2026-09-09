@@ -57,10 +57,18 @@ android {
         // per field here and no per-build-type override to keep in sync or get
         // wrong.
         //
-        // Empty means "the production gateway", which is what the SDK resolves
-        // an empty gatewayAddresses list to. This is not a WebSocket URL — the
-        // SDK takes host:port.
-        buildConfigField("String", "GATEWAY_URL", "\"\"")
+        // The production gateway, named explicitly. host:port, not a URL.
+        //
+        // It has to be named while this app is on meerkly-sdk 0.6.0: that
+        // version rejects an empty gatewayAddresses list from ProxyClient's
+        // constructor, despite the SDK README saying empty means the production
+        // gateway. Fixed in 0.6.1, which fills DEFAULT_GATEWAY_ADDRESSES in
+        // ProxyClient::new — but 0.6.1 is not on Maven Central yet, and pinning
+        // this app to an unreleased SDK would make it build here and nowhere
+        // else.
+        //
+        // When 0.6.1 ships: bump libs.versions.toml and this may go back to "".
+        buildConfigField("String", "GATEWAY_URL", "\"gw.meerkly.com:4443\"")
         // Account portal (OAuth provider + the /api/v1/me publisher-id lookup).
         buildConfigField("String", "ACCOUNT_BASE_URL", "\"https://dashboard.meerkly.com\"")
         // Must byte-match both the redirect_uri the dashboard seeds (derived
@@ -83,6 +91,18 @@ android {
         // truth). Resolved once at configuration time, so this stays
         // configuration-cache compatible.
         buildConfigField("String", "SDK_VERSION", "\"${libs.versions.meerklySdk.get()}\"")
+        // A QUIC connection survives this device changing network: the tunnel
+        // migrates onto the new path and keeps carrying traffic, so no
+        // handshake happens and nothing re-announces where the device now
+        // leaves from. Reconnecting on a settled network change makes that
+        // visible immediately.
+        //
+        // The gateway also notices a migration on its own and re-measures
+        // without the client's help, which is why this is a switch rather than
+        // the only defence: set it false and the network stays correct, just
+        // one heartbeat later. Flip it if a forced reconnect ever proves worse
+        // for a fleet than the migration it replaces.
+        buildConfigField("boolean", "RECONNECT_ON_NETWORK_CHANGE", "true")
     }
 
     signingConfigs {
