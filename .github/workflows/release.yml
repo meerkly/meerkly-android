@@ -189,15 +189,31 @@ jobs:
       # Skipped, loudly, when the service account isn't configured: the Play
       # API cannot create an app's *first* release, so that upload has to be
       # done by hand before this can ever work.
-      - name: Publish to Play (internal, draft)
+      # Open testing, published rather than drafted: the point of a release is
+      # that testers can install it, and a draft sits in the Console until
+      # someone remembers to press a button.
+      #
+      # `open` is public — anyone with the opt-in link can join. That is the
+      # intent, but it does mean this is the first track where a bad build
+      # reaches people who are not us. Play still gates it on review, and a
+      # rollout can be halted from the Console, but neither undoes an install
+      # someone already has.
+      #
+      # Expect the FIRST 2.0.0 upload to be held for a foreground-service
+      # declaration review. The specialUse type is unchanged from 1.1.1, but its
+      # subtype description now describes an exit node proxying traffic rather
+      # than a crawl worker serving fetch jobs, and Play reads that string. That
+      # is the documented catch-22 in CLAUDE.md: the form appears only after the
+      # upload is blocked. It is the normal path, not a failure.
+      - name: Publish to Play (open testing)
         if: env.PLAY_JSON != ''
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ env.PLAY_JSON }}
           packageName: com.meerkly.android
           releaseFiles: app/build/outputs/bundle/release/app-release.aab
-          track: internal
-          status: draft
+          track: open
+          status: completed
 
       - name: Note when the Play upload was skipped
         if: env.PLAY_JSON == ''
