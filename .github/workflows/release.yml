@@ -87,7 +87,11 @@ jobs:
       # Without it the Gradle build fails looking for platform 36 with no
       # ANDROID_HOME, which reads as a broken build rather than a missing
       # toolchain.
+      # Platform-tools only: the action's default list includes "tools", which
+      # current cmdline-tools (16.0) no longer carries, so the default fails.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - uses: gradle/actions/setup-gradle@v4
 
