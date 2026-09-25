@@ -16,7 +16,7 @@ robolectric = "4.13"
 coreTesting = "2.2.0"
 okhttp = "4.12.0"
 appauth = "0.11.1"
-meerklySdk = "0.6.0"
+meerklySdk = "0.6.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }

@@ -45,6 +45,7 @@ import com.meerkly.android.model.AuthStatus
 import com.meerkly.android.model.Earnings
 import com.meerkly.android.model.EarningsState
 import com.meerkly.android.proxy.ProxyState
+import com.meerkly.android.proxy.Refusal
 import com.meerkly.android.util.Formatters
 import com.meerkly.android.ui.components.ContentColumn
 import com.meerkly.android.ui.components.CheckIcon
@@ -111,6 +112,7 @@ fun DashboardScreen(
     val earnings by viewModel.earnings.collectAsState()
     val proxyState by viewModel.proxyState.collectAsState()
     val proxyError by viewModel.proxyError.collectAsState()
+    val proxyRejection by viewModel.proxyRejection.collectAsState()
     val workerEnabled by viewModel.workerEnabled.collectAsState()
     val batteryExempt by viewModel.batteryExempt.collectAsState()
     val notificationsGranted by viewModel.notificationsGranted.collectAsState()
@@ -139,7 +141,7 @@ fun DashboardScreen(
             .verticalScroll(rememberScrollState()),
     ) {
         ContentColumn(maxWidth = width.contentMaxWidthDp.dp) {
-            Hero(proxyState, proxyError, workerEnabled)
+            Hero(proxyState, proxyError, proxyRejection, workerEnabled)
             if (!accountReady) {
                 AccountNotReadyBanner(onRetry = viewModel::retryAccount)
             }
@@ -233,20 +235,37 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun Hero(proxyState: ProxyState, proxyError: String?, workerEnabled: Boolean) {
+private fun Hero(
+    proxyState: ProxyState,
+    proxyError: String?,
+    proxyRejection: String?,
+    workerEnabled: Boolean,
+) {
     // "You're all set" is only true when the client is actually connected;
     // otherwise say what's wrong instead of reassuring the user falsely. A
     // user-stopped worker is its OWN state — showing Offline copy would read
     // as something being broken when the user chose this.
+    //
+    // A gateway refusal outranks Connecting/Offline: the SDK retrying, or
+    // having given up, says nothing the user can act on, and the gateway's
+    // reason usually does. It is only shown while not connected, so a stale
+    // one can never sit under "You're all set".
+    val refusal = proxyRejection
+        ?.takeIf { workerEnabled && proxyState != ProxyState.Connected }
+        ?.let(Refusal::of)
     val titleRes = when {
         !workerEnabled -> R.string.dash_title_stopped
         proxyState == ProxyState.Connected -> R.string.dash_title
+        refusal == Refusal.SharedConnection -> R.string.dash_title_refused_shared
+        refusal == Refusal.Other -> R.string.dash_title_refused
         proxyState == ProxyState.Connecting -> R.string.dash_title_connecting
         else -> R.string.dash_title_offline
     }
     val subRes = when {
         !workerEnabled -> R.string.dash_sub_stopped
         proxyState == ProxyState.Connected -> R.string.dash_sub
+        refusal == Refusal.SharedConnection -> R.string.dash_sub_refused_shared
+        refusal == Refusal.Other -> R.string.dash_sub_refused
         proxyState == ProxyState.Connecting -> R.string.dash_sub_connecting
         else -> R.string.dash_sub_offline
     }
@@ -269,9 +288,17 @@ private fun Hero(proxyState: ProxyState, proxyError: String?, workerEnabled: Boo
                 style = MaterialTheme.typography.bodySmall,
                 color = InkSoft,
             )
-            if (workerEnabled && proxyState == ProxyState.Failed && proxyError != null) {
+            // The gateway's own words when it gave any (the shared-connection
+            // case is already explained above); otherwise whatever start()
+            // threw.
+            val detail = when (refusal) {
+                Refusal.SharedConnection -> null
+                Refusal.Other -> proxyRejection
+                null -> proxyError.takeIf { workerEnabled && proxyState == ProxyState.Failed }
+            }
+            if (detail != null) {
                 Text(
-                    text = proxyError,
+                    text = detail.replaceFirstChar { it.uppercase() },
                     style = MaterialTheme.typography.labelSmall,
                     color = RoseDeep,
                 )

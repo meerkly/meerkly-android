@@ -15,6 +15,10 @@
     <string name="dash_title_connecting">Connecting…</string>
     <string name="dash_sub_connecting">Meerkly is reaching out to the network. This usually only takes a moment.</string>
     <string name="dash_title_offline">Can\'t reach Meerkly</string>
+    <string name="dash_title_refused_shared">Another device is already sharing</string>
+    <string name="dash_sub_refused_shared">Meerkly lets one device per internet connection share at a time, and another one on this network got there first. Once it stops, or this phone switches to mobile data, open Meerkly again to connect.</string>
+    <string name="dash_title_refused">Meerkly turned this device away</string>
+    <string name="dash_sub_refused">The network gave the reason below. Open Meerkly again to retry.</string>
     <string name="dash_sub_offline">You\'re not helping out right now. Meerkly keeps trying in the background and picks up again on its own — your earnings are safe in the meantime.</string>
 
     <!-- Account not yet linked to a publisher id (sign-in succeeded, /api/v1/me didn't) -->

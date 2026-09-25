@@ -28,6 +28,7 @@ class ProxyControllerTest {
     private class FakeHandle(
         var state: ClientState = ClientState.IDLE,
         val failWith: String? = null,
+        var rejection: String? = null,
     ) : ProxyHandle {
         var started = 0
         var stopped = 0
@@ -36,6 +37,7 @@ class ProxyControllerTest {
 
         override fun state() = state
         override fun clientKey(): String? = "acct:inst"
+        override fun lastRejection(): String? = rejection
         override suspend fun start() {
             started++
             failWith?.let { throw ProxyException.Failed(it) }
@@ -61,6 +63,7 @@ class ProxyControllerTest {
 
         override fun state() = state
         override fun clientKey(): String? = "acct:inst"
+        override fun lastRejection(): String? = null
         override suspend fun start() {
             started++
             state = ClientState.CONNECTED
@@ -147,6 +150,58 @@ class ProxyControllerTest {
         assertEquals("gateway refused", controller.lastError.value)
         // The native handle must not leak just because connecting failed.
         assertEquals(1, handle.destroyed)
+    }
+
+    @Test
+    fun `a refused start keeps the gateway's reason after the handle is gone`() = runTest {
+        val handle = FakeHandle(
+            failWith = "no gateway accepted this client within 30s (tried gw.meerkly.com:4443)",
+            rejection = "another device is already connected from this IP address",
+        )
+        val controller = controller(handle, scope = TestScope(StandardTestDispatcher(testScheduler)))
+
+        controller.start()
+        advanceTimeBy(100)
+
+        assertEquals(ProxyState.Failed, controller.state.value)
+        assertEquals(
+            "another device is already connected from this IP address",
+            controller.rejection.value,
+        )
+        assertEquals(1, handle.destroyed)
+    }
+
+    @Test
+    fun `the poll reports a refusal while the SDK retries, and clears it once accepted`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        val handle = FakeHandle()
+        val controller = controller(handle, scope = scope)
+
+        controller.start()
+        advanceTimeBy(100)
+        handle.state = ClientState.CONNECTING
+        handle.rejection = "another device is already connected from this IP address"
+        advanceTimeBy(1_100)
+        assertEquals(handle.rejection, controller.rejection.value)
+
+        handle.state = ClientState.CONNECTED
+        handle.rejection = null
+        advanceTimeBy(1_100)
+        assertNull(controller.rejection.value)
+
+        controller.shutdown()
+    }
+
+    @Test
+    fun `stopping forgets an old refusal`() = runTest {
+        val handle = FakeHandle(rejection = "another device is already connected from this IP address")
+        val controller = controller(handle, scope = TestScope(StandardTestDispatcher(testScheduler)))
+
+        controller.start()
+        advanceTimeBy(1_100)
+        controller.shutdown()
+
+        assertNull(controller.rejection.value)
     }
 
     @Test

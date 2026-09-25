@@ -56,6 +56,19 @@ internal class ProxyController(
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
 
+    /**
+     * The reason the gateway gave the last time it refused this device — e.g.
+     * "another device is already connected from this IP address" — or null.
+     *
+     * Separate from [lastError] on purpose. That one is whatever start() threw,
+     * which for a refusal is a timeout message wrapped around this reason; this
+     * is only the gateway's own words, which are written for a person and are
+     * what the dashboard shows. Set while the SDK is still retrying as well as
+     * after start() gives up, and cleared once a gateway accepts the device.
+     */
+    private val _rejection = MutableStateFlow<String?>(null)
+    val rejection: StateFlow<String?> = _rejection.asStateFlow()
+
     // Volatile: emitState() reads these from the poll job's coroutine, which
     // may run on a different Dispatchers.Default thread than whichever thread
     // last wrote them under lifecycle.withLock. Without this, that thread has
@@ -115,6 +128,7 @@ internal class ProxyController(
             val reason = e.reasonText()
             logger.warn("proxy.config_rejected", mapOf("error" to reason))
             _lastError.value = reason
+            _rejection.value = null
             _state.value = ProxyState.Failed
             return
         }
@@ -130,6 +144,9 @@ internal class ProxyController(
             val reason = e.reasonText()
             logger.warn("proxy.start_failed", mapOf("error" to reason))
             _lastError.value = reason
+            // Read before destroy(): it is the handle's to answer, and the
+            // handle is about to be released.
+            _rejection.value = created.lastRejection()
             _state.value = ProxyState.Failed
             stopPolling()
             created.destroy()
@@ -174,6 +191,7 @@ internal class ProxyController(
         } finally {
             c.destroy()
             client = null
+            _rejection.value = null
             _state.value = ProxyState.Stopped
             logger.info("proxy.stopped")
         }
@@ -238,6 +256,11 @@ internal class ProxyController(
 
     private fun emitState() {
         val c = client ?: return
+        val refused = c.lastRejection()
+        if (_rejection.value != refused) {
+            _rejection.value = refused
+            if (refused != null) logger.warn("proxy.refused", mapOf("reason" to refused))
+        }
         val next = ProxyState.from(c.state())
         if (_state.value != next) {
             _state.value = next

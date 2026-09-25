@@ -47,6 +47,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** The reason the last start failed, or null. */
     val proxyError: StateFlow<String?> = graph.proxyController.lastError
 
+    /** Why the gateway last refused this device, in its own words, or null. */
+    val proxyRejection: StateFlow<String?> = graph.proxyController.rejection
+
     /** The account's earnings. Unknown until a fetch succeeds — never render 0. */
     val earnings: StateFlow<EarningsState> = graph.account.earnings
 
