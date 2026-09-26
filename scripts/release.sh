@@ -90,8 +90,11 @@ next_code=$((current_code + 1))
 
 # versionCode must strictly increase or Android refuses the upgrade — bumping
 # it is not optional, so it happens here rather than being remembered.
-sed -i '' -E "s/versionName = \"$current_name\"/versionName = \"$VERSION\"/" "$GRADLE"
-sed -i '' -E "s/versionCode = $current_code/versionCode = $next_code/" "$GRADLE"
+# -i.bak, then remove the backup: the one in-place form both BSD sed (macOS)
+# and GNU sed (Linux) accept. `sed -i ''` is BSD-only and fails on Linux.
+sed -i.bak -E "s/versionName = \"$current_name\"/versionName = \"$VERSION\"/" "$GRADLE"
+sed -i.bak -E "s/versionCode = $current_code/versionCode = $next_code/" "$GRADLE"
+rm -f "$GRADLE.bak"
 
 echo "versionName $current_name -> $VERSION"
 echo "versionCode $current_code -> $next_code"
