@@ -198,6 +198,19 @@ fun DashboardScreen(
                     ?: stringResource(R.string.earn_unknown_note),
                 chip = { IconChip(listOf(Emerald, EmeraldDeep)) { TrendIcon() } },
             )
+            val referralUrl = auth.referralUrl
+            if (loaded != null && referralUrl != null && showInviteCard(loaded, referralUrl)) {
+                val message = stringResource(R.string.invite_share_message, referralUrl)
+                val chooserTitle = stringResource(R.string.invite_share_chooser)
+                InviteFriendsCard(
+                    earnings = loaded,
+                    onShare = {
+                        runCatching {
+                            context.startActivity(Intent.createChooser(inviteShareIntent(message), chooserTitle))
+                        }
+                    },
+                )
+            }
             EarningsLinks(loaded)
             // Must track the proxy: "doing its thing" alongside an Offline hero
             // is the same false reassurance the old static chip gave. Hidden

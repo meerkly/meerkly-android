@@ -65,6 +65,12 @@ in `app/build.gradle.kts`.
 - **Scope is exit-node proxying + account/earnings display.** Do **not** build ahead of a new plan:
   durable storage / DB, job queues, artifact upload, object storage, geo-targeted selection,
   cash-out/payouts, a policy engine, or any UI beyond the earnings/device display.
+  **Approved addition — referrals:** the Home "Invite friends" card (`ui/InviteFriendsCard.kt`:
+  referral bonus lifetime/payable/held, friend counts per level, the API's rates, and a plain-text
+  `ACTION_SEND` share of the invite link) and the **Play Install Referrer** dependency
+  (`com.android.installreferrer:installreferrer`, `referral/`), used only to read `ref=CODE` once
+  per install and pass it as `ref` on the OAuth authorize request. Nothing beyond that (no in-app
+  referral tree, no invite contacts picker, no deep-link handling) without a new plan.
 - **Storage stays app-scoped.** Never read or use the user's installed browser's data. Don't expose
   local files to other apps beyond the FileProvider-mediated diagnostics share. Don't request broad
   storage permissions.
@@ -76,7 +82,9 @@ in `app/build.gradle.kts`.
   `RECEIVE_BOOT_COMPLETED` (BootReceiver), `POST_NOTIFICATIONS` (ongoing notification, 33+),
   `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (Doze exemption nudge), `WAKE_LOCK` (currently unused by
   this app's own Kotlin — see the comment in `AndroidManifest.xml` — kept because removing it is a
-  separate, deliberate decision). Do not add more without a plan.
+  separate, deliberate decision). Do not add more without a plan. One library-merged exception:
+  the Install Referrer AAR adds `com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE`
+  (normal, no prompt; lets the app bind Play's referrer service) — accepted with the referral plan.
 
 ## Always-on worker service (`worker/`)
 
@@ -144,7 +152,14 @@ Mirrors the desktop's OAuth flow; device registration is gone, replaced by a pub
   the id is known and heals an install that signed in but never received one (`healPublisherId`).
 - **`data/SecureStore.kt`** — AndroidKeyStore AES/GCM encryption over `meerkly_prefs` values
   (session-memory fallback if the Keystore is broken; never plaintext on disk). Holds the OAuth
-  session and the publisher id.
+  session, the publisher id, the invite link (`referral_url` from /me) and a pending invite code.
+- **Referrals** — `referral/InstallReferrerReader` reads the Play install referrer once per install
+  (flag `install_referrer_checked` in `meerkly_prefs`; transient service errors retry next launch,
+  all errors silent), keeps a valid `ref=CODE` (`^[A-Z2-9]{8}$`, parsed by the pure
+  `referral/ReferralCode`) in SecureStore; `AuthManager.signInIntent` sends it as `ref`, and
+  `completeSignIn` clears it. The dashboard only attaches it when that sign-in creates the account.
+  Every referral field in /me and /earnings is optional — older servers send none, and the card
+  stays hidden unless `referrals_enabled` and a `referral_url` are both present.
 - **`auth/AccountCoordinator.kt`** — the wiring: the proxy starts only once a publisher id is known;
   sign-in fetches that id, then starts the worker; sign-out stops the proxy (see "Always-on worker
   service" above). Exposes the merged `StateFlow<AuthStatus>` the UI renders.

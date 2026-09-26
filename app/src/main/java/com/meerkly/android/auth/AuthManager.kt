@@ -8,6 +8,10 @@ import com.meerkly.android.data.SecureStore
 import com.meerkly.android.logging.AppLogger
 import com.meerkly.android.model.DeviceEarnings
 import com.meerkly.android.model.Earnings
+import com.meerkly.android.model.ReferralCounts
+import com.meerkly.android.model.ReferralRates
+import com.meerkly.android.referral.InstallReferrerReader
+import com.meerkly.android.referral.ReferralCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -83,6 +87,16 @@ class AuthManager(
     var publisherId: String? = null
         private set
 
+    /**
+     * This account's invite link (`https://meerkly.com/r/CODE`) from
+     * /api/v1/me, or null on a server that predates referrals or has them
+     * switched off. Not a secret; persisted so the invite card survives a
+     * restart without another /me call.
+     */
+    @Volatile
+    var referralUrl: String? = null
+        private set
+
     val isSignedIn: Boolean get() = email != null && authState.isAuthorized
 
     /** Restore the persisted session (call once at app start). */
@@ -114,22 +128,33 @@ class AuthManager(
                 }
                 email = store.get(KEY_EMAIL)
                 publisherId = store.get(KEY_PUBLISHER_ID)
+                referralUrl = store.get(KEY_REFERRAL_URL)
             }
         }.onFailure {
             logger.warn("auth.restore_failed", mapOf("error" to it.message))
         }
     }
 
-    /** The browser intent that starts the sign-in flow (launch for result). */
+    /**
+     * The browser intent that starts the sign-in flow (launch for result).
+     *
+     * Carries `ref=CODE` when this install arrived through an invite link
+     * (see [InstallReferrerReader]); the dashboard only attaches it if this
+     * sign-in creates a new account, so sending it to an existing one is inert.
+     */
     fun signInIntent(): Intent {
-        val request = AuthorizationRequest.Builder(
+        val builder = AuthorizationRequest.Builder(
             serviceConfig,
             CLIENT_ID,
             ResponseTypeValues.CODE,
             Uri.parse(BuildConfig.OAUTH_REDIRECT_URI),
-        ).setScopes("public").build() // PKCE (S256) + state are automatic
-        return authService.getAuthorizationRequestIntent(request)
+        ).setScopes("public") // PKCE (S256) + state are automatic
+        pendingReferralCode()?.let { builder.setAdditionalParameters(mapOf("ref" to it)) }
+        return authService.getAuthorizationRequestIntent(builder.build())
     }
+
+    private fun pendingReferralCode(): String? =
+        store.get(InstallReferrerReader.KEY_PENDING_CODE)?.takeIf(ReferralCode::isValid)
 
     /**
      * Completes sign-in from the redirect result: code exchange, then a
@@ -175,10 +200,14 @@ class AuthManager(
             return "Sign-in failed. Please try again."
         }
 
-        email = account.first
-        publisherId = account.second
+        email = account.email
+        publisherId = account.publisherId
+        referralUrl = account.referralUrl
         persist()
-        logger.info("auth.signed_in", mapOf("email" to account.first, "paired" to (account.second != null)))
+        // The invite code has done its job once a sign-in has completed: the
+        // dashboard attached it if (and only if) that sign-in made the account.
+        store.remove(InstallReferrerReader.KEY_PENDING_CODE)
+        logger.info("auth.signed_in", mapOf("email" to account.email, "paired" to (account.publisherId != null)))
         return null
     }
 
@@ -238,19 +267,30 @@ class AuthManager(
         authState = AuthState()
         email = null
         publisherId = null
+        referralUrl = null
         store.remove(KEY_AUTH_STATE)
         store.remove(KEY_EMAIL)
         store.remove(KEY_PUBLISHER_ID)
+        store.remove(KEY_REFERRAL_URL)
     }
 
     private fun persist() {
         store.put(KEY_AUTH_STATE, authState.jsonSerializeString())
         email?.let { store.put(KEY_EMAIL, it) }
         publisherId?.let { store.put(KEY_PUBLISHER_ID, it) }
+        referralUrl?.let { store.put(KEY_REFERRAL_URL, it) } ?: store.remove(KEY_REFERRAL_URL)
     }
 
-    /** (email, publisherId) from /api/v1/me, or null if the call failed. */
-    private suspend fun fetchAccount(accessToken: String): Pair<String, String?>? =
+    /** What /api/v1/me says about the signed-in account. */
+    data class Account(
+        val email: String,
+        val publisherId: String?,
+        val referralCode: String?,
+        val referralUrl: String?,
+    )
+
+    /** The account from /api/v1/me, or null if the call failed. */
+    private suspend fun fetchAccount(accessToken: String): Account? =
         withContext(Dispatchers.IO) {
             runCatching {
                 http.newCall(
@@ -262,9 +302,7 @@ class AuthManager(
                     val bodyString = res.body?.string()
                     if (isEmailUnverified(res.code, bodyString)) throw EmailUnverifiedException()
                     if (!res.isSuccessful) return@use null
-                    val json = JSONObject(bodyString ?: "")
-                    val mail = parseEmail(json) ?: return@use null
-                    mail to parsePublisherId(json)
+                    parseAccount(JSONObject(bodyString ?: ""))
                 }
             }.onFailure {
                 // EmailUnverifiedException is a distinct, user-actionable
@@ -283,8 +321,22 @@ class AuthManager(
     suspend fun refreshAccount() {
         val accessToken = getAccessToken() ?: return
         val account = runCatching { fetchAccount(accessToken) }.getOrNull() ?: return
-        email = account.first
-        publisherId = account.second
+        email = account.email
+        publisherId = account.publisherId
+        referralUrl = account.referralUrl
+        persist()
+    }
+
+    /**
+     * Re-read /api/v1/me for the invite link only, leaving the publisher id
+     * alone. For installs that signed in before the server sent referral
+     * fields — /me is otherwise only read at sign-in.
+     */
+    suspend fun refreshReferral() {
+        val accessToken = getAccessToken() ?: return
+        val account = runCatching { fetchAccount(accessToken) }.getOrNull() ?: return
+        if (account.email != email) return
+        referralUrl = account.referralUrl
         persist()
     }
 
@@ -333,6 +385,7 @@ class AuthManager(
         private const val KEY_AUTH_STATE = "auth_state"
         private const val KEY_EMAIL = "account_email"
         private const val KEY_PUBLISHER_ID = "publisher_id"
+        private const val KEY_REFERRAL_URL = "referral_url"
 
         // Parsing is in the companion so it can be tested without an Android
         // Context, an AuthorizationService or a live socket.
@@ -384,6 +437,29 @@ class AuthManager(
         fun parsePublisherId(json: JSONObject): String? =
             json.optString("publisher_id").takeIf { it.isNotBlank() }
 
+        /** The whole /me contract; null when there is no email (not a usable account). */
+        fun parseAccount(json: JSONObject): Account? {
+            val mail = parseEmail(json) ?: return null
+            return Account(
+                email = mail,
+                publisherId = parsePublisherId(json),
+                referralCode = parseReferralCode(json),
+                referralUrl = parseReferralUrl(json),
+            )
+        }
+
+        /** Absent, null, blank or malformed all become null (older servers send nothing). */
+        fun parseReferralCode(json: JSONObject): String? =
+            optStringOrNull(json, "referral_code")?.takeIf(ReferralCode::isValid)
+
+        /** Only an https URL is shared onward; anything else is treated as absent. */
+        fun parseReferralUrl(json: JSONObject): String? =
+            optStringOrNull(json, "referral_url")?.takeIf { it.startsWith("https://") }
+
+        // optString turns a JSON null into the string "null".
+        private fun optStringOrNull(json: JSONObject, key: String): String? =
+            if (json.isNull(key)) null else json.optString(key).trim().takeIf { it.isNotEmpty() }
+
         fun parseEarnings(json: JSONObject): Earnings {
             val devices = json.optJSONArray("devices")?.let { arr ->
                 (0 until arr.length()).map { i ->
@@ -409,6 +485,23 @@ class AuthManager(
                 canRequestPayout = json.optBoolean("can_request_payout", false),
                 devicesWindowDays = json.optInt("devices_window_days", 30),
                 devices = devices,
+                // Referral fields: all optional, older servers send none.
+                referralsEnabled = json.optBoolean("referrals_enabled", false),
+                referralUsd = json.optDouble("referral_usd", 0.0),
+                referralHeldUsd = json.optDouble("referral_held_usd", 0.0),
+                referralLifetimeUsd = json.optDouble("referral_lifetime_usd", 0.0),
+                referralCounts = json.optJSONObject("referrals").let { r ->
+                    ReferralCounts(
+                        level1 = r?.optInt("level1", 0) ?: 0,
+                        level2 = r?.optInt("level2", 0) ?: 0,
+                    )
+                },
+                referralRates = json.optJSONObject("referral_rates")?.let { r ->
+                    ReferralRates(
+                        level1 = r.optDouble("level1", Double.NaN).takeUnless { it.isNaN() },
+                        level2 = r.optDouble("level2", Double.NaN).takeUnless { it.isNaN() },
+                    )
+                } ?: ReferralRates(null, null),
             )
         }
     }

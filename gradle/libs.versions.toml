@@ -17,6 +17,9 @@ coreTesting = "2.2.0"
 okhttp = "4.12.0"
 appauth = "0.11.1"
 meerklySdk = "0.6.2"
+# Play Install Referrer: reads the ref=CODE a meerkly.com/r/CODE invite link
+# put on the Play Store URL, once per install.
+installreferrer = "2.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -41,6 +44,7 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 androidx-arch-core-testing = { group = "androidx.arch.core", name = "core-testing", version.ref = "coreTesting" }
+installreferrer = { group = "com.android.installreferrer", name = "installreferrer", version.ref = "installreferrer" }
 meerkly-sdk = { group = "com.meerkly", name = "sdk", version.ref = "meerklySdk" }
 
 [plugins]

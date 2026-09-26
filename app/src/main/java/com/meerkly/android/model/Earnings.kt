@@ -24,11 +24,30 @@ data class Earnings(
     /** The window the per-device figures cover — 30 at the time of writing. */
     val devicesWindowDays: Int,
     val devices: List<DeviceEarnings>,
+    /**
+     * Referral bonus. Every field defaults to "none" because older servers
+     * send nothing; [lifetimeUsd] stays own traffic only, while [unpaidUsd]
+     * already includes [referralUsd].
+     */
+    val referralsEnabled: Boolean = false,
+    /** Payable, not yet paid out — already part of [unpaidUsd]. */
+    val referralUsd: Double = 0.0,
+    /** Earned but held for review; not payable yet. */
+    val referralHeldUsd: Double = 0.0,
+    val referralLifetimeUsd: Double = 0.0,
+    val referralCounts: ReferralCounts = ReferralCounts(0, 0),
+    val referralRates: ReferralRates = ReferralRates(null, null),
 ) {
     /** This install's row, or null when the gateway has not yet reported it. */
     fun forDevice(deviceId: String): DeviceEarnings? =
         devices.firstOrNull { it.deviceId == deviceId }
 }
+
+/** Friends who joined with this account's invite (level1) and their friends (level2). */
+data class ReferralCounts(val level1: Int, val level2: Int)
+
+/** USD per GB of a referred account's sharing; null when the server did not say. */
+data class ReferralRates(val level1: Double?, val level2: Double?)
 
 /**
  * One device's share. A *display* attribution: device ids are self-reported and

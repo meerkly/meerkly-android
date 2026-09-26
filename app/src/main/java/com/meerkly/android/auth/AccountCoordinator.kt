@@ -69,6 +69,13 @@ internal class AccountCoordinator(
                 else -> logger.info("account.proxy_deferred", mapOf("reason" to "signed out"))
             }
             refreshStatus()
+            // An install signed in before the server sent an invite link has
+            // never seen one — /me is otherwise only read at sign-in. Cheap,
+            // off the startup path, and a failure just leaves the card hidden.
+            if (auth.isSignedIn && auth.referralUrl == null) {
+                auth.refreshReferral()
+                if (auth.referralUrl != null) refreshStatus()
+            }
         }
     }
 
@@ -139,7 +146,7 @@ internal class AccountCoordinator(
             AuthStatus.SignedOut
         } else {
             refreshEarnings()
-            AuthStatus.SignedIn(email, auth.publisherId)
+            AuthStatus.SignedIn(email, auth.publisherId, auth.referralUrl)
         }
     }
 }

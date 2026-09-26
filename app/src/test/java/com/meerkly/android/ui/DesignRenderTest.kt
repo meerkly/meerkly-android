@@ -9,9 +9,14 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.meerkly.android.model.DeviceEarnings
+import com.meerkly.android.model.Earnings
+import com.meerkly.android.model.ReferralCounts
+import com.meerkly.android.model.ReferralRates
 import com.meerkly.android.ui.nav.WindowWidth
 import com.meerkly.android.ui.theme.Bone
 import com.meerkly.android.ui.theme.MeerklyTheme
@@ -105,6 +110,22 @@ class DesignRenderTest {
         )
         render("devices") {
             DevicesContent(devices, thisDeviceId = "dev_a", width = WindowWidth.Compact, windowDays = 30)
+        }
+    }
+
+    @Test
+    fun `invite friends card renders`() {
+        val earnings = Earnings(
+            unpaidUsd = 3.1, lifetimeUsd = 9.4, pendingUsd = 0.2, bytesShared = 0, settledBytes = 0,
+            usdPerGb = 0.35, minimumPayoutUsd = 5.0, canRequestPayout = false, devicesWindowDays = 30,
+            devices = emptyList(), referralsEnabled = true, referralUsd = 0.84, referralHeldUsd = 0.12,
+            referralLifetimeUsd = 2.37, referralCounts = ReferralCounts(3, 5),
+            referralRates = ReferralRates(0.1, 0.05),
+        )
+        render("invite-card", heightDp = 420) {
+            androidx.compose.foundation.layout.Box(Modifier.padding(20.dp)) {
+                InviteFriendsCard(earnings, onShare = {})
+            }
         }
     }
 }

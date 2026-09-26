@@ -163,6 +163,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.appauth)
     implementation(libs.meerkly.sdk)
+    implementation(libs.installreferrer)
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)

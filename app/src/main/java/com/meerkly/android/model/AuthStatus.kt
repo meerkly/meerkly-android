@@ -19,5 +19,7 @@ sealed interface AuthStatus {
     data class SignedIn(
         val email: String,
         val publisherId: String?,
+        /** Invite link from /api/v1/me; null on servers without referrals. */
+        val referralUrl: String? = null,
     ) : AuthStatus
 }

@@ -49,6 +49,17 @@
     <string name="earn_see_link">See your earnings</string>
     <string name="earn_payout_link">Request a payout</string>
 
+    <!-- Invite friends (referral) card. Rates come from the API. -->
+    <string name="invite_label">Invite friends</string>
+    <string name="invite_payable_note">Referral bonus earned · %1$s ready to pay out</string>
+    <string name="invite_held_note">+ %1$s held for review</string>
+    <string name="invite_counts">Friends: %1$d · Their friends: %2$d</string>
+    <string name="invite_explainer">Get %1$s per GB your friends share and %2$s per GB their friends share, for as long as they share. Meerkly pays it on top of their earnings.</string>
+    <string name="invite_explainer_generic">Get a bonus on what your friends share, for as long as they share. Meerkly pays it on top of their earnings.</string>
+    <string name="invite_share">Share invite link</string>
+    <string name="invite_share_chooser">Share invite link</string>
+    <string name="invite_share_message">I share my unused internet with Meerkly and get paid for it. Join me: %1$s</string>
+
     <string name="card_running_title">Up and running</string>
     <string name="card_running_note">Meerkly is switched on and doing its thing.</string>
     <string name="card_paused_title">Paused for now</string>

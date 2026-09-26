@@ -94,6 +94,86 @@ class AuthManagerApiTest {
         assertNull(earnings.forDevice("dev_missing"))
     }
 
+    @Test
+    fun `me parses the referral code and url when present`() {
+        server.enqueue(
+            body(
+                """{"email":"a@b.com","publisher_id":"pub_abc","referral_code":"ABCDEFGH",
+                   "referral_url":"https://meerkly.com/r/ABCDEFGH"}""",
+            ),
+        )
+
+        val account = AuthManager.parseAccount(JSONObject(fetch("/api/v1/me")))!!
+
+        assertEquals("pub_abc", account.publisherId)
+        assertEquals("ABCDEFGH", account.referralCode)
+        assertEquals("https://meerkly.com/r/ABCDEFGH", account.referralUrl)
+    }
+
+    @Test
+    fun `me without referral fields, or with nulls, yields null referral values`() {
+        val absent = AuthManager.parseAccount(JSONObject("""{"email":"a@b.com","publisher_id":"pub_abc"}"""))!!
+        assertNull(absent.referralCode)
+        assertNull(absent.referralUrl)
+
+        val nulls = AuthManager.parseAccount(
+            JSONObject("""{"email":"a@b.com","referral_code":null,"referral_url":null}"""),
+        )!!
+        assertNull(nulls.referralCode)
+        assertNull(nulls.referralUrl)
+    }
+
+    @Test
+    fun `a malformed referral code or a non-https url is ignored`() {
+        val json = JSONObject("""{"email":"a@b.com","referral_code":"abc","referral_url":"http://x/r/abc"}""")
+        assertNull(AuthManager.parseReferralCode(json))
+        assertNull(AuthManager.parseReferralUrl(json))
+    }
+
+    @Test
+    fun `me with no email is not an account`() {
+        assertNull(AuthManager.parseAccount(JSONObject("""{"publisher_id":"pub_abc"}""")))
+    }
+
+    @Test
+    fun `earnings parses the referral fields`() {
+        server.enqueue(
+            body(
+                """{"unpaid_usd":2.5,"lifetime_usd":4.0,"referrals_enabled":true,
+                   "referral_usd":0.5,"referral_held_usd":0.2,"referral_lifetime_usd":1.25,
+                   "referrals":{"level1":3,"level2":7},
+                   "referral_rates":{"level1":0.1,"level2":0.05}}""",
+            ),
+        )
+
+        val earnings = AuthManager.parseEarnings(JSONObject(fetch("/api/v1/earnings")))
+
+        assertTrue(earnings.referralsEnabled)
+        assertEquals(0.5, earnings.referralUsd, 0.0001)
+        assertEquals(0.2, earnings.referralHeldUsd, 0.0001)
+        assertEquals(1.25, earnings.referralLifetimeUsd, 0.0001)
+        assertEquals(3, earnings.referralCounts.level1)
+        assertEquals(7, earnings.referralCounts.level2)
+        assertEquals(0.1, earnings.referralRates.level1!!, 0.0001)
+        assertEquals(0.05, earnings.referralRates.level2!!, 0.0001)
+        // lifetime_usd keeps meaning own traffic only.
+        assertEquals(4.0, earnings.lifetimeUsd, 0.0001)
+    }
+
+    @Test
+    fun `earnings from an older server defaults the referral fields to none`() {
+        val earnings = AuthManager.parseEarnings(JSONObject("""{"unpaid_usd":1.0,"lifetime_usd":1.0}"""))
+
+        assertEquals(false, earnings.referralsEnabled)
+        assertEquals(0.0, earnings.referralUsd, 0.0)
+        assertEquals(0.0, earnings.referralHeldUsd, 0.0)
+        assertEquals(0.0, earnings.referralLifetimeUsd, 0.0)
+        assertEquals(0, earnings.referralCounts.level1)
+        assertEquals(0, earnings.referralCounts.level2)
+        assertNull(earnings.referralRates.level1)
+        assertNull(earnings.referralRates.level2)
+    }
+
     // isEmailUnverified is the one branch of the 403 handling with a
     // user-visible consequence — it decides whether a failed sign-in gets
     // told to confirm their email, or just told "sign-in failed" again. It

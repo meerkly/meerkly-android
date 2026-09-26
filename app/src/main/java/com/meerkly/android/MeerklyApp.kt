@@ -17,6 +17,7 @@ import com.meerkly.android.net.DefaultNetworkWatcher
 import com.meerkly.android.net.NetworkChangeMonitor
 import com.meerkly.android.proxy.ProxyController
 import com.meerkly.android.proxy.ProxyState
+import com.meerkly.android.referral.InstallReferrerReader
 import com.meerkly.android.worker.WorkerPrefs
 import com.meerkly.android.worker.WorkerServiceLauncher
 import kotlinx.coroutines.CoroutineScope
@@ -121,6 +122,9 @@ class AppGraph(app: Application) {
             "app.start",
             mapOf("machine_id" to machineId, "sdk" to Build.VERSION.SDK_INT, "app" to appVersion),
         )
+        // Once per install: keep the invite code (if any) from the Play
+        // install referrer so the first sign-in can carry it. Silent on error.
+        InstallReferrerReader(app, secureStore, logger).readOnce()
         account.onAppStart()
 
         // Registered only while there is a connection to reconnect, so a device
