@@ -54,7 +54,7 @@ in `app/build.gradle.kts`.
   would mean qualifying the foreground service, notification and Keystore paths on two API levels
   the app has never run on. It is a choice now, not a floor a dependency imposes.
 - App compiles against **Java 17** (`compileOptions` source/target = `VERSION_17`).
-- `com.meerkly:sdk:0.6.2` (the `meerklySdk` version catalog entry, `libs.meerkly.sdk`) is the proxy
+- `com.meerkly:sdk:1.0.0` (the `meerklySdk` version catalog entry, `libs.meerkly.sdk`) is the proxy
   engine — a uniffi-generated Kotlin binding over a Rust core, dispatched through JNA reflection.
   `MainViewModel.machineInfo.sdkVersion` reads this same catalog entry via a `BuildConfig` field
   (`app/build.gradle.kts`), so the Settings/diagnostics display can't drift from it. R8 stays off in
