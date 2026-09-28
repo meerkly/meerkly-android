@@ -1,5 +1,9 @@
 name: Release
 
+# This repo is public, so every job runs on GitHub-hosted runners, which are
+# free here. Never point a job at the self-hosted pool: a pull request from a
+# fork runs its own code on whatever runner the job names.
+
 # Tag-driven, draft first — mirrors unblocked-app's release flow.
 #
 #   scripts/release.sh 1.1        # bumps versionName/versionCode, commits, tags v1.1
@@ -34,7 +38,7 @@ concurrency:
 jobs:
   verify:
     name: Verify tag
-    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.check.outputs.version }}
       versionName: ${{ steps.check.outputs.versionName }}
@@ -62,7 +66,7 @@ jobs:
   build:
     name: Build signed APKs
     needs: verify
-    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     env:
       # Lifted to the job env because `secrets` is not usable in a step-level
       # `if:` — this is what lets the Play upload skip cleanly when unset.
@@ -78,15 +82,10 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      # GitHub's hosted images ship the Android SDK; the self-hosted runner
-      # image deliberately does not — it installs only sudo and a handful of
-      # CLI tools, and baking a full SDK into it would inflate every job that
-      # never touches Android. So the SDK is installed per run, here, which is
-      # what release-sdks.yml's android-build already does.
-      #
-      # Without it the Gradle build fails looking for platform 36 with no
-      # ANDROID_HOME, which reads as a broken build rather than a missing
-      # toolchain.
+      # Sets ANDROID_HOME and the platform tools explicitly rather than relying
+      # on whatever the runner image happens to carry. Without ANDROID_HOME the
+      # Gradle build fails looking for platform 36, which reads as a broken
+      # build rather than a missing toolchain.
       # Platform-tools only: the action's default list includes "tools", which
       # current cmdline-tools (16.0) no longer carries, so the default fails.
       - uses: android-actions/setup-android@v3
@@ -232,7 +231,7 @@ jobs:
   release:
     name: Draft release
     needs: [verify, build]
-    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
