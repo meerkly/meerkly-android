@@ -16,7 +16,7 @@ robolectric = "4.13"
 coreTesting = "2.2.0"
 okhttp = "4.12.0"
 appauth = "0.11.1"
-meerklySdk = "1.0.0"
+meerklySdk = "1.2.0"
 # Play Install Referrer: reads the ref=CODE a meerkly.com/r/CODE invite link
 # put on the Play Store URL, once per install.
 installreferrer = "2.2"

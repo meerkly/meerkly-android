@@ -3,6 +3,7 @@ package com.meerkly.android.net
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
+import android.net.NetworkCapabilities
 import com.meerkly.android.logging.AppLogger
 
 /**
@@ -19,12 +20,17 @@ import com.meerkly.android.logging.AppLogger
  * and that is what the default network means. A capability-filtered request
  * would also report networks the process is not using.
  *
+ * It also reports the default network's transport ([NetworkTransport]) on every
+ * capabilities change, and null when the default network is lost, which the
+ * gateway uses to class the exit as mobile, residential or datacenter.
+ *
  * Requires `ACCESS_NETWORK_STATE`, which this app already holds.
  */
 internal class DefaultNetworkWatcher(
     context: Context,
     private val logger: AppLogger,
     private val monitor: NetworkChangeMonitor,
+    private val onTransport: (String?) -> Unit = {},
 ) {
     private val connectivity =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
@@ -33,7 +39,32 @@ internal class DefaultNetworkWatcher(
         override fun onAvailable(network: Network) {
             monitor.report(network.networkHandle)
         }
+
+        override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+            onTransport(transportOf(caps))
+        }
+
+        override fun onLost(network: Network) {
+            onTransport(null)
+        }
     }
+
+    /**
+     * The transport of the network in use right now, or null with none. Read
+     * synchronously at start so the first handshake carries it; the callback
+     * above only runs while registered.
+     */
+    fun currentTransport(): String? = runCatching {
+        val cm = connectivity ?: return null
+        val active = cm.activeNetwork ?: return null
+        cm.getNetworkCapabilities(active)?.let(::transportOf)
+    }.getOrNull()
+
+    private fun transportOf(caps: NetworkCapabilities): String = NetworkTransport.of(
+        cellular = caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR),
+        wifi = caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
+        ethernet = caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET),
+    )
 
     private var registered = false
 

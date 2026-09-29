@@ -17,6 +17,8 @@ internal interface ProxyHandle {
     fun clientKey(): String?
     /** Why the gateway last refused this client, or null. See [ProxyController.rejection]. */
     fun lastRejection(): String?
+    /** The transport this device is on; see [ProxyController.reportNetwork]. */
+    fun setNetwork(network: String?)
     suspend fun start()
     suspend fun stop()
     fun destroy()
@@ -29,6 +31,7 @@ internal class SdkProxyHandle(config: ProxyConfig) : ProxyHandle {
     override fun state(): ClientState = client.state()
     override fun clientKey(): String? = client.clientKey()
     override fun lastRejection(): String? = client.lastRejection()
+    override fun setNetwork(network: String?) = client.setNetwork(network)
     override suspend fun start() = client.start()
     override suspend fun stop() = client.stop()
     override fun destroy() = client.destroy()

@@ -79,7 +79,7 @@ class AppGraph(app: Application) {
 
     // internal, not public: ProxyController's own visibility is internal (see
     // ProxyController.kt), and a public property can't expose a narrower type.
-    internal val proxyController = ProxyController(
+    internal val proxyController: ProxyController = ProxyController(
         deviceId = machineId,
         appVersion = appVersion,
         logger = logger,
@@ -88,16 +88,24 @@ class AppGraph(app: Application) {
         publisherId = { publisherId },
         // Empty means the production gateway — the only gateway any build points at.
         gatewayAddresses = BuildConfig.GATEWAY_URL.takeIf { it.isNotBlank() }?.let { listOf(it) }.orEmpty(),
+        // Read at each start (the watcher below is only registered while a
+        // client runs), so the handshake already names the transport.
+        currentNetwork = { networkWatcher.currentTransport() },
     )
     val workerPrefs = WorkerPrefs(app)
 
-    // Watching for a change of network, and reconnecting when the device has
-    // settled on a new one. See RECONNECT_ON_NETWORK_CHANGE in build.gradle.kts
-    // for why this is a switch and not the only defence.
-    private val networkWatcher = DefaultNetworkWatcher(
+    // Watching for a change of network: passing the new transport to the SDK
+    // at once, and reconnecting when the device has settled on a new network.
+    // See RECONNECT_ON_NETWORK_CHANGE in build.gradle.kts for why the
+    // reconnect is a switch and not the only defence; the transport report is
+    // not behind it, because it replaces nothing the gateway can learn alone.
+    private val networkWatcher: DefaultNetworkWatcher = DefaultNetworkWatcher(
         context = app,
         logger = logger,
-        monitor = NetworkChangeMonitor(scope = scope) { proxyController.restart() },
+        monitor = NetworkChangeMonitor(scope = scope) {
+            if (BuildConfig.RECONNECT_ON_NETWORK_CHANGE) proxyController.restart()
+        },
+        onTransport = { proxyController.reportNetwork(it) },
     )
     // internal, not public: AccountCoordinator's own visibility is internal
     // (it takes the internal ProxyController) — see the note there.
@@ -127,18 +135,16 @@ class AppGraph(app: Application) {
         InstallReferrerReader(app, secureStore, logger).readOnce()
         account.onAppStart()
 
-        // Registered only while there is a connection to reconnect, so a device
-        // whose worker is off is not woken for every network change. The
-        // monitor outlives the registration, which is what stops a restart's
-        // own stop-and-start from looking like a network change and reconnecting
-        // again: it still remembers the network it last saw.
-        if (BuildConfig.RECONNECT_ON_NETWORK_CHANGE) {
-            scope.launch {
-                proxyController.state.collect { state ->
-                    when (state) {
-                        ProxyState.Connecting, ProxyState.Connected -> networkWatcher.start()
-                        else -> networkWatcher.stop()
-                    }
+        // Registered only while there is a connection to report to, so a
+        // device whose worker is off is not woken for every network change.
+        // The monitor outlives the registration, which is what stops a
+        // restart's own stop-and-start from looking like a network change and
+        // reconnecting again: it still remembers the network it last saw.
+        scope.launch {
+            proxyController.state.collect { state ->
+                when (state) {
+                    ProxyState.Connecting, ProxyState.Connected -> networkWatcher.start()
+                    else -> networkWatcher.stop()
                 }
             }
         }

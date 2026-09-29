@@ -32,6 +32,10 @@ import kotlinx.coroutines.sync.withLock
  * @param publisherId read fresh on every start, never captured: it arrives
  *   asynchronously after sign-in, and a controller built at app start would
  *   otherwise hold the null it saw then.
+ * @param currentNetwork the transport the device is on right now ("cellular",
+ *   "wifi", …, see [com.meerkly.android.net.NetworkTransport]), read on every
+ *   start so the first handshake already carries it. Later changes arrive
+ *   through [reportNetwork].
  */
 // internal, not public: the primary constructor's createHandle parameter
 // exposes ProxyHandle, which is deliberately internal (see ProxyHandle.kt) —
@@ -45,6 +49,7 @@ internal class ProxyController(
     private val logger: AppLogger,
     private val publisherId: () -> String?,
     private val gatewayAddresses: List<String> = emptyList(),
+    private val currentNetwork: () -> String? = { null },
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
     // The seam that makes this class testable off-device: the real handle's
     // constructor loads a native library a JVM test cannot supply.
@@ -75,6 +80,11 @@ internal class ProxyController(
     // no guarantee of ever observing the write.
     @Volatile private var client: ProxyHandle? = null
     @Volatile private var pollJob: Job? = null
+
+    // The transport last handed to the SDK, so a capabilities callback that
+    // repeats it (the framework sends them constantly) costs nothing. Only
+    // touched under `lifecycle`.
+    private var network: String? = null
 
     // start() and stop() suspend, so a synchronized block is wrong: a monitor
     // held across a suspension point blocks the thread the coroutine resumes
@@ -133,6 +143,11 @@ internal class ProxyController(
             return
         }
         client = created
+        // Before start(), so the handshake itself says which transport this
+        // is: the gateway classifies the exit from its first moment rather
+        // than after the first callback.
+        network = currentNetwork()
+        created.setNetwork(network)
         _lastError.value = null
         _state.value = ProxyState.Connecting
         startPolling()
@@ -222,6 +237,30 @@ internal class ProxyController(
         logger.info("proxy.restarting")
         shutdownLocked()
         startLocked()
+    }
+
+    /**
+     * Tell the gateway the device moved onto another transport.
+     *
+     * Telemetry, not control: the gateway uses it (with the network it
+     * measures) to class the exit as mobile, residential or datacenter. It
+     * never starts or stops anything, so an explicit Stop stays sticky; with
+     * no client running the value simply waits for the next start, which
+     * reads the current one fresh anyway.
+     *
+     * Under the lifecycle lock because a handle being torn down must not be
+     * called into, and a released one throws.
+     */
+    fun reportNetwork(transport: String?) {
+        scope.launch {
+            lifecycle.withLock {
+                if (network == transport) return@withLock
+                network = transport
+                val c = client ?: return@withLock
+                c.setNetwork(transport)
+                logger.info("proxy.network", mapOf("network" to transport))
+            }
+        }
     }
 
     /**

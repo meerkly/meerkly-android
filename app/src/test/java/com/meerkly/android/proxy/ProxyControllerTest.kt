@@ -38,6 +38,8 @@ class ProxyControllerTest {
         override fun state() = state
         override fun clientKey(): String? = "acct:inst"
         override fun lastRejection(): String? = rejection
+        val networks = mutableListOf<String?>()
+        override fun setNetwork(network: String?) { networks += network }
         override suspend fun start() {
             started++
             failWith?.let { throw ProxyException.Failed(it) }
@@ -64,6 +66,7 @@ class ProxyControllerTest {
         override fun state() = state
         override fun clientKey(): String? = "acct:inst"
         override fun lastRejection(): String? = null
+        override fun setNetwork(network: String?) {}
         override suspend fun start() {
             started++
             state = ClientState.CONNECTED
@@ -94,12 +97,14 @@ class ProxyControllerTest {
         handle: FakeHandle,
         publisherId: String? = "pub_abc",
         scope: TestScope,
+        currentNetwork: () -> String? = { null },
     ) = ProxyController(
         deviceId = "dev_test",
         deviceName = "Test",
         appVersion = "2.0.0",
         logger = logger,
         publisherId = { publisherId },
+        currentNetwork = currentNetwork,
         scope = scope,
         createHandle = { handle.also { h -> h.config = it } },
     )
@@ -373,5 +378,62 @@ class ProxyControllerTest {
         assertEquals(0, handle.destroyed)
         assertNull(controller.lastError.value)
         assertTrue(true)
+    }
+
+    /** The handshake itself must name the transport, not wait for a callback. */
+    @Test
+    fun `the current network is set before the client starts`() = runTest {
+        val handle = FakeHandle()
+        val controller = controller(
+            handle,
+            scope = TestScope(StandardTestDispatcher(testScheduler)),
+            currentNetwork = { "cellular" },
+        )
+
+        controller.start()
+        advanceTimeBy(100)
+
+        assertEquals(listOf<String?>("cellular"), handle.networks)
+        assertEquals(1, handle.started)
+        controller.shutdown()
+    }
+
+    /** Capabilities callbacks repeat themselves constantly; only changes go on. */
+    @Test
+    fun `network changes reach a running client once each`() = runTest {
+        val handle = FakeHandle()
+        val controller = controller(
+            handle,
+            scope = TestScope(StandardTestDispatcher(testScheduler)),
+            currentNetwork = { "wifi" },
+        )
+        controller.start()
+        advanceTimeBy(100)
+
+        controller.reportNetwork("wifi")
+        controller.reportNetwork("cellular")
+        controller.reportNetwork("cellular")
+        controller.reportNetwork(null)
+        advanceTimeBy(100)
+
+        assertEquals(listOf("wifi", "cellular", null), handle.networks)
+        controller.shutdown()
+    }
+
+    /**
+     * A report is telemetry: with the worker stopped (an explicit Stop is
+     * sticky) it must not build or start a client.
+     */
+    @Test
+    fun `a network report never starts a stopped client`() = runTest {
+        val handle = FakeHandle()
+        val controller = controller(handle, scope = TestScope(StandardTestDispatcher(testScheduler)))
+
+        controller.reportNetwork("cellular")
+        advanceTimeBy(100)
+
+        assertEquals(0, handle.started)
+        assertTrue(handle.networks.isEmpty())
+        assertNull(handle.config)
     }
 }
